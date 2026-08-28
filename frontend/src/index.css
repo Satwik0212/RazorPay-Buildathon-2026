@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --color-rzp-primary: var(--rzp-primary);
+  --color-rzp-primary-hover: var(--rzp-primary-hover);
+  --color-rzp-primary-soft: var(--rzp-primary-soft);
+  --color-rzp-bg: var(--rzp-bg);
+  --color-rzp-surface: var(--rzp-surface);
+  --color-rzp-surface-subtle: var(--rzp-surface-subtle);
+  --color-rzp-text: var(--rzp-text);
+  --color-rzp-text-secondary: var(--rzp-text-secondary);
+  --color-rzp-text-muted: var(--rzp-text-muted);
+  --color-rzp-border: var(--rzp-border);
+  --color-rzp-border-strong: var(--rzp-border-strong);
+  --color-rzp-success: var(--rzp-success);
+  --color-rzp-success-soft: var(--rzp-success-soft);
+  --color-rzp-warning: var(--rzp-warning);
+  --color-rzp-warning-soft: var(--rzp-warning-soft);
+  --color-rzp-danger: var(--rzp-danger);
+  --color-rzp-danger-soft: var(--rzp-danger-soft);
+  --color-rzp-info: var(--rzp-info);
+  --color-rzp-info-soft: var(--rzp-info-soft);
+  --color-rzp-ai: var(--rzp-ai);
+  --color-rzp-ai-soft: var(--rzp-ai-soft);
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+:root {
+  --rzp-primary: #6822CC;
+  --rzp-primary-hover: #5B1DB3;
+  --rzp-primary-soft: #F1EAFE;
+
+  --rzp-bg: #F7F7F9;
+  --rzp-surface: #FFFFFF;
+  --rzp-surface-subtle: #FAFAFC;
+
+  --rzp-text: #171717;
+  --rzp-text-secondary: #5F6368;
+  --rzp-text-muted: #8A8F98;
+
+  --rzp-border: #E7E7EC;
+  --rzp-border-strong: #D8D8E0;
+
+  --rzp-success: #159447;
+  --rzp-success-soft: #EAF8F0;
+
+  --rzp-warning: #B76E00;
+  --rzp-warning-soft: #FFF5DF;
+
+  --rzp-danger: #D92D20;
+  --rzp-danger-soft: #FEECEB;
+
+  --rzp-info: #2563EB;
+  --rzp-info-soft: #EEF4FF;
+
+  --rzp-ai: #7C3AED;
+  --rzp-ai-soft: #F3E8FF;
+}
+
+body {
+  background-color: var(--rzp-bg);
+  color: var(--rzp-text);
+  font-family: var(--font-sans);
+}
