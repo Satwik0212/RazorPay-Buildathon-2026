@@ -27,8 +27,12 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: str = "test_buildathon_webhook_secret"
 
     # LLM (Sanji module)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    SARVAM_API_KEY: str = ""
+    SARVAM_MODEL: str = "sarvam-105b"
     LLM_API_KEY: str = ""
-    LLM_PROVIDER: str = "openai"
+    LLM_PROVIDER: str = "groq"
 
     # Business Defaults (Minor units, INR)
     DEFAULT_QUOTE_EXPIRY_SECONDS: int = 300  # 5 minutes

@@ -1,3 +1,9 @@
+import os
+# Override environment variables for deterministic offline testing
+os.environ["GROQ_API_KEY"] = ""
+os.environ["SARVAM_API_KEY"] = ""
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

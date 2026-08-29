@@ -7,4 +7,5 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: razorpay_buildathon
     ports:
-      - '5432:5432'
+      # Host port 5433 avoids collision with an existing local PostgreSQL (5432)
+      - '5433:5432'

@@ -1,24 +1,122 @@
+import httpx
+import json
+import logging
 import re
 from typing import Type, TypeVar, Any, Dict, List, Optional
 from pydantic import BaseModel
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=BaseModel)
 
 
-class LLMClient:
-    """
-    LLM Client adapter for structured intent generation and semantic analysis.
-    Executes deep semantic extraction with deterministic safety fallback.
-    """
+class GroqProvider:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.model = settings.GROQ_MODEL
 
+    def generate_structured(self, prompt: str, schema: Type[T]) -> Optional[T]:
+        if not self.api_key:
+            return None
+
+        try:
+            schema_json = schema.model_json_schema()
+
+            system_prompt = f"""You are a specialized buyer intent extraction engine.
+You MUST output strictly valid JSON matching the following JSON schema:
+{json.dumps(schema_json)}
+
+Extract the user's intent. Do NOT add markdown formatting. Output raw JSON only."""
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.0,
+                "max_tokens": 1024
+            }
+
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(self.base_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+            result_json = response.json()
+            content = result_json["choices"][0]["message"]["content"]
+
+            parsed_data = json.loads(content)
+            return schema.model_validate(parsed_data)
+        except Exception as e:
+            # We don't log the API key or full exception string which might contain headers
+            logger.warning("Groq API call failed")
+            return None
+
+
+class SarvamProvider:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.sarvam.ai/v1/chat/completions"
+        self.model = settings.SARVAM_MODEL
+
+    def generate_structured(self, prompt: str, schema: Type[T]) -> Optional[T]:
+        if not self.api_key:
+            return None
+
+        try:
+            schema_json = schema.model_json_schema()
+
+            system_prompt = f"""Extract the user's intent as JSON matching this schema:
+{json.dumps(schema_json)}
+
+Respond with JSON only. No explanations."""
+
+            headers = {
+                "api-subscription-key": self.api_key,
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.0,
+                "max_tokens": 1024
+            }
+
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(self.base_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+            result_json = response.json()
+            content = result_json["choices"][0]["message"]["content"]
+
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+
+            parsed_data = json.loads(content)
+            return schema.model_validate(parsed_data)
+        except Exception as e:
+            logger.warning("Sarvam API call failed")
+            return None
+
+
+class OfflineProvider:
     def generate_structured(self, prompt: str, schema: Type[T]) -> T:
-        """
-        Extract structured information according to the target schema.
-        Employs semantic pattern extraction across natural language commerce queries.
-        """
         text = prompt.lower()
-
-        # 1. Category extraction
         categories = [
             "laptop", "notebook", "headphones", "earphones", "earbuds",
             "microphone", "mic", "smartphone", "phone", "mobile", "keyboard", "mouse",
@@ -45,11 +143,8 @@ class LLMClient:
                     category = cat
                 break
 
-        # 2. Budget extraction (Amounts parsed into minor units / paise)
         max_budget = None
         min_budget = None
-
-        # Matches: "under 50000", "below 60k", "under ₹5,000", "around ₹20,000", "about 1000", "budget of 15000"
         max_match = re.search(
             r'(?:under|below|less than|max(?:imum)?(?: of)?|budget(?: of)?|upto|up to|around|approx(?:imately)?|about|for|near)\s*(?:rs\.?|inr|₹)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?)\s*(k|thousand|lakh|lac|m|million)?',
             text
@@ -64,18 +159,14 @@ class LLMClient:
                 val *= 100000
             elif multiplier_str in ["m", "million"]:
                 val *= 1000000
-            
-            # Minor currency units conversion (Rupees to Paise)
             max_budget = int(val * 100) if val < 1000000 else int(val)
 
-        # Direct number matches if not found via keywords
         if max_budget is None:
             num_match = re.search(r'(?:rs\.?|inr|₹)\s*([0-9]+(?:,[0-9]+)*)', text)
             if num_match:
                 val = float(num_match.group(1).replace(",", ""))
                 max_budget = int(val * 100) if val < 1000000 else int(val)
 
-        # Min budget check ("above 20000", "at least 10k")
         min_match = re.search(
             r'(?:above|more than|min(?:imum)?(?: of)?|at least)\s*(?:rs\.?|inr|₹)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?)\s*(k|thousand|lakh|lac)?',
             text
@@ -90,36 +181,22 @@ class LLMClient:
                 val *= 100000
             min_budget = int(val * 100) if val < 1000000 else int(val)
 
-        # 3. Requirements extraction (Features & explicit specifications)
         requirements = []
         feature_keywords = [
-            ("anc", "ANC"),
-            ("noise cancel", "ANC"),
-            ("gaming", "gaming"),
-            ("wireless", "wireless"),
-            ("bluetooth", "bluetooth"),
-            ("fast delivery", "fast_delivery"),
-            ("express delivery", "fast_delivery"),
-            ("waterproof", "waterproof"),
-            ("16gb", "16GB_RAM"),
-            ("32gb", "32GB_RAM"),
-            ("rtx", "dedicated_gpu"),
-            ("gpu", "dedicated_gpu"),
-            ("ssd", "SSD"),
-            ("oled", "OLED"),
-            ("4k", "4K"),
-            ("type-c", "type-c"),
-            ("usb-c", "type-c"),
-            ("mechanical", "mechanical"),
-            ("leather", "leather"),
-            ("in stock", "in_stock"),
-            ("warranty", "warranty")
+            ("anc", "ANC"), ("noise cancel", "ANC"), ("gaming", "gaming"),
+            ("wireless", "wireless"), ("bluetooth", "bluetooth"),
+            ("fast delivery", "fast_delivery"), ("express delivery", "fast_delivery"),
+            ("waterproof", "waterproof"), ("16gb", "16GB_RAM"),
+            ("32gb", "32GB_RAM"), ("rtx", "dedicated_gpu"),
+            ("gpu", "dedicated_gpu"), ("ssd", "SSD"), ("oled", "OLED"),
+            ("4k", "4K"), ("type-c", "type-c"), ("usb-c", "type-c"),
+            ("mechanical", "mechanical"), ("leather", "leather"),
+            ("in stock", "in_stock"), ("warranty", "warranty")
         ]
         for kw, req_name in feature_keywords:
             if kw in text and req_name not in requirements:
                 requirements.append(req_name)
 
-        # 4. Delivery deadline extraction
         delivery_deadline_days = None
         delivery_match = re.search(r'(?:within|in|under)\s*([0-9]+)\s*days?', text)
         if delivery_match:
@@ -131,27 +208,17 @@ class LLMClient:
         elif "fast delivery" in text or "quick delivery" in text or "express" in text:
             delivery_deadline_days = 2
 
-        # 5. Preferences extraction
         preferences = []
         pref_keywords = [
-            ("high performance", "high_performance"),
-            ("premium", "premium"),
-            ("cheapest", "budget_friendly"),
-            ("cheap", "budget_friendly"),
-            ("budget", "budget_friendly"),
-            ("lightweight", "lightweight"),
-            ("durable", "durable"),
-            ("good battery", "long_battery_life"),
-            ("long battery", "long_battery_life"),
-            ("battery life", "long_battery_life"),
-            ("battery backup", "long_battery_life"),
-            ("audio quality", "high_audio_quality"),
-            ("sound quality", "high_audio_quality"),
-            ("black", "color_black"),
-            ("silver", "color_silver"),
-            ("ergonomic", "ergonomic"),
-            ("discount", "has_discount"),
-            ("offer", "has_offer")
+            ("high performance", "high_performance"), ("premium", "premium"),
+            ("cheapest", "budget_friendly"), ("cheap", "budget_friendly"),
+            ("budget", "budget_friendly"), ("lightweight", "lightweight"),
+            ("durable", "durable"), ("good battery", "long_battery_life"),
+            ("long battery", "long_battery_life"), ("battery life", "long_battery_life"),
+            ("battery backup", "long_battery_life"), ("audio quality", "high_audio_quality"),
+            ("sound quality", "high_audio_quality"), ("black", "color_black"),
+            ("silver", "color_silver"), ("ergonomic", "ergonomic"),
+            ("discount", "has_discount"), ("offer", "has_offer")
         ]
         for kw, pref_name in pref_keywords:
             if kw in text and pref_name not in preferences:
@@ -165,8 +232,42 @@ class LLMClient:
             "delivery_deadline_days": delivery_deadline_days,
             "preferences": preferences,
         }
-
         return schema(**data)
+
+
+class LLMClient:
+    """
+    LLM Client adapter with Groq (Primary), Sarvam (Fallback), and Offline (Emergency) routing.
+    """
+    def __init__(self):
+        self.groq = GroqProvider(settings.GROQ_API_KEY)
+        self.sarvam = SarvamProvider(settings.SARVAM_API_KEY)
+        self.offline = OfflineProvider()
+
+    def generate_structured(self, prompt: str, schema: Type[T]) -> T:
+        # Try Groq
+        if settings.GROQ_API_KEY:
+            try:
+                result = self.groq.generate_structured(prompt, schema)
+                if result is not None:
+                    logger.info("provider=groq")
+                    return result
+            except Exception:
+                pass
+
+        # Try Sarvam
+        if settings.SARVAM_API_KEY:
+            try:
+                result = self.sarvam.generate_structured(prompt, schema)
+                if result is not None:
+                    logger.info("provider=sarvam")
+                    return result
+            except Exception:
+                pass
+
+        # Emergency Offline
+        logger.info("provider=offline")
+        return self.offline.generate_structured(prompt, schema)
 
 
 llm_client = LLMClient()

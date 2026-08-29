@@ -1,11 +1,8 @@
 import uuid
-from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
 
-
-def test_api_buyer_intent_multiple_inputs():
+def test_api_buyer_intent_multiple_inputs(client):
     # 1. Budget query
     res1 = client.post("/api/v1/buyer/intents", json={"text": "I need a cheap laptop under 50000"})
     assert res1.status_code == 200
@@ -27,7 +24,7 @@ def test_api_buyer_intent_multiple_inputs():
     assert data1["intent"]["max_budget"] != data2["intent"]["max_budget"]
 
 
-def test_api_buyer_personas_list_and_create():
+def test_api_buyer_personas_list_and_create(client):
     # List personas
     res = client.get("/api/v1/buyer-personas")
     assert res.status_code == 200
@@ -55,7 +52,7 @@ def test_api_buyer_personas_list_and_create():
     assert create_res.json()["name"] == f"Gamer Buyer {custom_id[:6]}"
 
 
-def test_api_what_if_analysis():
+def test_api_what_if_analysis(client):
     # 1. Register merchant to get auth token
     unique_email = f"whatif_{uuid.uuid4().hex[:8]}@test.com"
     m_reg = client.post(

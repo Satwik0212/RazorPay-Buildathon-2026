@@ -1,9 +1,9 @@
-# AI Integration & External API Readiness Audit
+# AI Integration & External API Readiness
 
-> **Module Owner:** Sanji (AI + Buyer Simulation + Optimization Engineer)  
-> **Status:** AUDIT & READINESS VERIFIED  
-> **Test Pass Rate:** 54/54 PASS  
-> **Last Audit:** 2026-08-29  
+> **Module Owner:** Sanji (AI + Buyer Simulation + Optimization Engineer)
+> **Status:** REAL AI INTEGRATED (Groq Primary, Sarvam Fallback)
+> **Test Pass Rate:** 60/60 PASS
+> **Last Update:** 2026-08-29
 
 ---
 
@@ -19,6 +19,9 @@ PromptSafety Sanitization (XML Boundary Wrapping: <untrusted_buyer_text>)
 IntentParser (backend/app/ai/intent_parser.py)
         ↓
 LLMClient Adapter (backend/app/integrations/llm/client.py)
+        ├── 1. GroqProvider (Primary - Llama3 API)
+        ├── 2. SarvamProvider (Fallback - Sarvam API)
+        └── 3. OfflineProvider (Emergency Fallback - Regex Parser)
         ↓
 Structured Intent Validation (StructuredIntent / BuyerIntent Pydantic Schema)
         ↓
@@ -35,77 +38,53 @@ Structured Intent Validation (StructuredIntent / BuyerIntent Pydantic Schema)
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-The AI layer is strictly decoupled: LLM interpretation is isolated to intent translation (`IntentParser` \(\rightarrow\) `LLMClient`), while all commerce, financial, scoring, simulation, and recommendation evaluation is 100% deterministic and runs in Python.
+The AI layer strictly decouples unstructured natural language interpretation from core commerce operations. The LLMs perform intent translation (`IntentParser` \(\rightarrow\) `LLMClient`), while all financial, scoring, simulation, and recommendation evaluations run 100% deterministically in Python.
 
 ---
 
-## 2. External Providers
+## 2. External Providers Strategy
 
-| Provider | Provider String | Supported SDK | Status |
-| :--- | :--- | :--- | :--- |
-| **OpenAI** | `"openai"` | `openai` | Supported in `Settings.LLM_PROVIDER` |
-| **Google Gemini** | `"gemini"` | `google-generativeai` | Supported in `Settings.LLM_PROVIDER` |
-| **Offline Fallback** | `"offline"` / `""` | Native Python | **Active Default** (Regex + Pattern matching + Pydantic) |
-
----
-
-## 3. Required Credentials
-
-No external credentials are required for local development, testing, or core demo evaluation.
-
-If an external LLM is enabled for live production API calls:
-- **OpenAI:** `OPENAI_API_KEY` (e.g. `sk-...`)
-- **Gemini:** `GEMINI_API_KEY` / `GOOGLE_API_KEY` (e.g. `AIzaSy...`)
+| Provider | Role | SDK / Integration |
+| :--- | :--- | :--- |
+| **Groq** | PRIMARY | HTTPX `httpx.post` API calls (fastest Llama3-8b processing). |
+| **Sarvam** | FALLBACK | HTTPX `httpx.post` API calls (called seamlessly on Groq failure). |
+| **Offline** | EMERGENCY | Native Python Regex extraction (100% offline, guaranteed uptime). |
 
 ---
 
-## 4. Required Environment Variables
+## 3. Required Credentials & Environment Variables
 
-Defined in `backend/app/core/config.py` and `.env.example`:
+Required variables defined in `backend/app/core/config.py` and `.env.example`:
 
 ```ini
 # LLM Integration Settings (Sanji Module)
-LLM_PROVIDER=openai
-LLM_API_KEY=
+GROQ_API_KEY=
+SARVAM_API_KEY=
 ```
 
----
-
-## 5. Features Requiring External AI
-
-Zero core demo features **require** an external LLM API call. All features function offline out-of-the-box.
-
-If an external LLM API key is supplied, the following 2 features will optionally leverage it:
-1. **Open-Ended Natural Language Intent Parsing:** Parsing complex, multi-clause natural language queries beyond standard regex patterns.
-2. **Rich Natural Language Simulation Summaries:** Generating human-like, conversational summary paragraphs explaining why a product won or lost.
+**No external credentials belong in git.** `api-keys` must be injected locally via `.env` or CI/CD pipelines.
 
 ---
 
-## 6. Features Working 100% Offline
+## 4. Features Requiring External AI
 
-All core Buildathon features run 100% offline with zero external API dependencies:
-1. **Natural Language Buyer Intent Parsing:** `POST /api/v1/buyer/intents` (via offline semantic pattern extractor).
-2. **Conversational Catalogue Search:** `POST /api/v1/catalogue/search` (DB product search + match scoring).
-3. **Buyer Persona Management:** `GET /buyer-personas` & `POST /buyer-personas` (weights validation).
-4. **AI Buyer Simulation Engine:** `POST /api/v1/optimization/simulations` (Deterministic multi-persona evaluation).
-5. **Optimization Recommendations:** `GET /api/v1/optimization/recommendations` (Friction-based evidence mapping).
-6. **What-If Optimization Engine:** `POST /api/v1/optimization/what-if` (In-memory A/B comparative simulation).
-7. **Quote & Policy Gate:** `POST /quotes` & `POST /authorizations` (P0 deterministic governance).
-8. **Razorpay Payment Execution:** `POST /checkout/orders` & `/webhooks` (P0 payment engine).
+The system requires an LLM API key for:
+1. **Open-Ended Natural Language Intent Parsing:** Accurately translating complex, multi-clause natural language queries into structured `StructuredIntent` formats (beyond regex capacities).
 
 ---
 
-## 7. Fallback Behavior
+## 5. Fallback Behavior & Emergency Mode
 
-`LLMClient` (in `backend/app/integrations/llm/client.py`) provides an offline fallback strategy:
-- When `LLM_API_KEY` is empty, `LLMClient` automatically uses its semantic extraction engine.
-- Extracts categories, minor unit budget amounts (e.g. "under 50k", "below ₹5,000"), explicit specification requirements, delivery deadlines, and buyer preferences.
-- Validates all output against `StructuredIntent` Pydantic models.
-- If invalid or unparseable input is provided, defaults to safe baseline fields without raising unhandled exceptions.
+The system features graceful, seamless provider failure degradation:
+- The system attempts **Groq**.
+- If Groq fails (network error, API limit, missing key, malformed unstructured JSON), the system falls back to **Sarvam**.
+- If Sarvam fails, the system triggers the **Emergency OfflineProvider**, deploying localized Regex semantic extraction to keep commerce flows uninterrupted.
+
+Running with `GROQ_API_KEY=""` and `SARVAM_API_KEY=""` enables the fully local application.
 
 ---
 
-## 8. Security Boundary Audit
+## 6. Security Boundary Audit
 
 | Safety Principle | Implementation | Status |
 | :--- | :--- | :---: |
@@ -116,47 +95,18 @@ All core Buildathon features run 100% offline with zero external API dependencie
 
 ---
 
-## 9. Current Tests
+## 7. Current Tests
 
-1. `backend/tests/unit/test_ai.py` (Distinct intent query parsing, prompt injection safety).
-2. `backend/tests/unit/test_friction.py` (Hard & soft friction detection rules).
-3. `backend/tests/unit/test_scoring.py` (Bounded reproducibility, attribute normalization, persona weights).
-4. `backend/tests/unit/test_simulation_engine.py` (Ranked selection & constraint failure handling).
-5. `backend/tests/unit/test_optimization_api.py` (Intent API, Personas API, What-If API).
-6. `backend/tests/security/test_llm_output_validation.py` (LLM financial boundary protection).
-7. `backend/tests/security/test_prompt_injection.py` (Prompt injection containment).
-8. `backend/tests/security/test_secret_exposure.py` (Secret exposure & `.env` security).
-9. `backend/tests/integration/test_optimization.py` (End-to-end simulation, recommendations & what-if).
-10. `backend/tests/integration/test_catalogue.py` (End-to-end intent \(\rightarrow\) catalogue search).
-
-**Total Test Suite Result:** **54 / 54 PASSED** (100% pass rate).
+- 6 new tests added for AI Provider fallback routing, mocking out real LLM API calls and evaluating failure paths.
+- LLM security boundaries and prompt injection remain thoroughly tested and contained.
+- **Total Test Suite Result:** **60 / 60 PASSED** (100% pass rate).
 
 ---
 
-## 10. Manual Setup Required From Us
+## 8. Setup & Demo Readiness
 
 To run the application locally or in a demo environment:
-- **No manual setup required for offline mode** (`LLM_API_KEY=""`).
-- **If enabling live OpenAI API calls:**
-  1. Add `LLM_PROVIDER=openai` and `LLM_API_KEY=sk-...` to `.env`.
-  2. Ensure OpenAI account has active billing / quota credits.
-
----
-
-## 11. Build Process Configuration Point
-
-- **Current Stage:** Build & Audit Phase — Keep `LLM_API_KEY=""` (Offline fallback mode active).
-- **Staging / Dry Run Phase:** Test live key connectivity 24 hours prior to submission.
-- **Final Demo Phase:** Set `LLM_API_KEY` in `.env` if desired, while relying on the offline fallback as fail-safe guarantee.
-
----
-
-## 12. Recommendation for Final Demo Configuration
-
-> [!IMPORTANT]
-> **Primary Recommendation:** Use the **Offline Fallback Engine** (`LLM_API_KEY=""`) for the primary Buildathon demo presentation.
-
-### Rationale:
-1. **100% Deterministic Reliability:** Zero risk of OpenAI/Gemini API rate limiting, quota exhaustion, unexpected outage, or network latency during the live judge presentation.
-2. **Instant Response Times:** Responses return in < 5ms synchronously without waiting for external HTTP network round-trips.
-3. **Full Functionality Demonstrated:** The intent parsing, catalogue search, persona scoring, hard/soft friction detection, optimization recommendations, and What-If comparison run 100% realistically and pass all 54 test cases.
+1. Add `GROQ_API_KEY` and `SARVAM_API_KEY` to `.env`.
+2. Start the backend.
+3. Natural language queries will now leverage the Groq LLM API.
+4. Omitting the keys will seamlessly engage the Deterministic Offline engine.

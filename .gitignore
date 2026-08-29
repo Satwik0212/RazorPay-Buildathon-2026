@@ -100,3 +100,6 @@ credentials/
 *.pem
 *.key
 *.cert
+
+# Temporary checkout artifact
+checkout.html
