@@ -1,7 +1,11 @@
 import { apiClient } from './client';
+import type { SimulationResponse, Recommendation, WhatIfRequest, WhatIfResponse } from '../types';
 
 export const simulationApi = {
-  runSimulation: (data: any) => apiClient.post('/optimization/simulations', data),
-  getRecommendations: (merchantId?: string) => 
-    apiClient.get(merchantId ? `/optimization/recommendations?merchant_id=${merchantId}` : '/optimization/recommendations'),
+  runSimulation: (data: { scenario_count?: number; buyer_profiles?: string[] }) => 
+    apiClient.post<SimulationResponse>('/optimization/simulations', data),
+  getRecommendations: () => 
+    apiClient.get<Recommendation[]>('/optimization/recommendations'),
+  runWhatIf: (data: WhatIfRequest) =>
+    apiClient.post<WhatIfResponse>('/optimization/what-if', data),
 };

@@ -105,4 +105,28 @@ No further major architectural redesign should be undertaken unless implementati
   - Razorpay order creation (`POST /checkout/orders`)
 - Audited codebase to guarantee strict enforcement of financial boundaries (frontend does not compute authoritative monetary totals, taxes, or discounts).
 - Confirmed total elimination of mock data adapters and hardcoded business metrics, ensuring honest empty/loading/error states across all components.
-- Verified production build cleanliness (`npm run build` succeeds with zero errors and zero warnings).
+- Verified production build cleanliness (`npm run build` succeeds with zero errors and zero warnings).
+
+### 29 August 2026 (Evening) — Merchant Intelligence Pipeline & What-If Simulator (Checkpoint 2 / Task 1)
+
+# What I did today (Zoro - Frontend & UX)
+
+- Connected the full merchant intelligence pipeline: **Dashboard → Simulations → Friction Diagnostics → Actionable Recommendations → What-If Experimentation**.
+- **Merchant Dashboard (`Dashboard.tsx`)**:
+  - Connected live catalogue statistics (real product counts, active discovery count, inventory stock, categories covered).
+  - Added direct pipeline cards linking merchant workflow steps: Step 1: Diagnose (Simulation), Step 2: Understand (Recommendations), Step 3: Experiment (What-If).
+- **Synthetic Buyer Simulation (`SimulationDashboard.tsx`)**:
+  - Integrated dynamic persona fetching (`GET /buyer-personas`) allowing merchants to select target buyer profiles (Budget, Speed, Quality, Feature, Balanced).
+  - Added configurable scenario counts (5, 10, 20 scenarios).
+  - Added friction distribution breakdown chips highlighting exact constraint rejections (`PRICE_TOO_HIGH`, `SLOW_DELIVERY`, etc.).
+  - Added expandable decision logs for each scenario showing matched product name, price, rankings, and natural language explanation.
+- **Recommendations & Interactive What-If Workbench (`Optimization.tsx`)**:
+  - Integrated live friction-based recommendations (`GET /optimization/recommendations`).
+  - Added "Test with What-If" action to auto-fill hypothesis and target product parameters into the What-If workbench.
+  - Implemented interactive What-If scenario workbench calling `POST /optimization/what-if` in memory (zero database mutations).
+  - Rendered side-by-side comparison of baseline metrics vs simulated metrics with delta percentage badges.
+- **Analytics & Catalogue**:
+  - Implemented real catalogue readiness analytics (`Analytics.tsx`) showing structured attribute completeness and stock availability.
+  - Added client-side live search filtering on `Catalogue.tsx`.
+- Verified the complete 54/54 backend test suite passes and frontend production build succeeds in < 3s with zero errors.
+

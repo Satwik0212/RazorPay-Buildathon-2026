@@ -12,6 +12,8 @@ from app.schemas.optimization.simulation import (
 from app.services.product_service import ProductService
 from app.simulation.engine import simulation_engine
 from app.api.v1.buyer.personas import DEFAULT_PERSONAS, _custom_personas
+from app.security.authentication import get_current_merchant
+from app.models.merchant import Merchant
 
 router = APIRouter(prefix="/optimization", tags=["Optimization & Simulation"])
 
@@ -37,14 +39,11 @@ def _resolve_persona_weights(profile_name: str) -> Dict[str, float]:
     return PERSONA_PROFILE_MAP["BALANCED"]
 
 
-from app.security.authentication import get_current_merchant
-from app.models.merchant import User
-
 @router.post("/simulations", response_model=SimulationResponse, status_code=status.HTTP_200_OK)
 def run_simulation(
     req: SimulationCreate,
     db: Session = Depends(get_db),
-    current_merchant: User = Depends(get_current_merchant)
+    current_merchant: Merchant = Depends(get_current_merchant)
 ):
     """
     Executes synchronous, deterministic buyer simulations against the merchant's catalogue.
@@ -95,7 +94,7 @@ def run_simulation(
                 intent_dict = {"max_budget": 1000000, "requirements": []}
 
         sim_output = simulation_engine.run_simulation(
-            merchant_id=str(req.merchant_id),
+            merchant_id=str(req.merchant_id or merchant_id),
             persona_weights=weights,
             intent=intent_dict,
             catalogue=catalogue,

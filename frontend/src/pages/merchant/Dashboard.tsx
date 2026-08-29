@@ -1,119 +1,311 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
-import { Bot, LineChart, ShoppingBag, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { 
+  Package, 
+  Bot, 
+  Sparkles, 
+  ArrowRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  Layers, 
+  TestTube,
+  ShoppingBag,
+  Activity
+} from 'lucide-react';
+import { productsApi } from '../../api/products';
+import { simulationApi } from '../../api/simulation';
+import { authApi } from '../../api/auth';
+import type { Product, Recommendation } from '../../types';
 
 export const Dashboard = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const prodRes = await productsApi.getProducts();
+        const items = prodRes.data.items || [];
+        setProducts(items);
+
+        try {
+          const merchantId = await authApi.getOrInitMerchantId();
+          const recRes = await simulationApi.getRecommendations();
+          setRecommendations(recRes.data || []);
+        } catch {
+          setRecommendations([]);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard metrics:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const totalInventory = products.reduce((acc, p) => acc + (p.inventory?.available_quantity || 0), 0);
+  const activeProducts = products.filter(p => p.is_active).length;
+  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--rzp-text)]">AI Commerce Intelligence</h1>
+          <p className="text-sm text-[var(--rzp-text-muted)] mt-1">
+            Real-time merchant catalogue visibility and agentic buyer intelligence.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link to="/simulation">
+            <Button variant="ai" size="sm">
+              <PlayIcon className="h-4 w-4 mr-1.5" /> Run Simulation
+            </Button>
+          </Link>
+          <Link to="/buyer">
+            <Button variant="outline" size="sm">
+              <ShoppingBag className="h-4 w-4 mr-1.5" /> Test AI Buyer
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Top Metrics Row - REAL Authoritative Data */}
       <div>
-        <h1 className="text-2xl font-bold text-[var(--rzp-text)]">Overview</h1>
-        <p className="text-sm text-[var(--rzp-text-muted)]">Monitor your real transactions and AI simulated performance.</p>
-      </div>
-
-      <div className="bg-[var(--rzp-info-soft)] border border-[var(--rzp-info)] p-3 rounded-lg flex items-start text-sm text-[var(--rzp-info)]">
-        <AlertTriangle className="h-5 w-5 mr-2 shrink-0" />
-        <p>
-          <strong>Notice:</strong> Business metrics aggregation is not yet available in the backend API. Showing placeholders for layout purposes. No fake metrics are generated.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* Real Data */}
-        <MetricCard 
-          title="GMV" 
-          badge="REAL DATA"
-          badgeColor="default"
-          value="--" 
-          icon={<TrendingUp className="h-5 w-5 text-[var(--rzp-success)]" />} 
-        />
-        <MetricCard 
-          title="Orders" 
-          badge="REAL DATA"
-          badgeColor="default"
-          value="--" 
-          icon={<ShoppingBag className="h-5 w-5 text-[var(--rzp-primary)]" />} 
-        />
-        
-        {/* Simulated Data */}
-        <MetricCard 
-          title="AI Match Rate" 
-          badge="SIMULATED"
-          badgeColor="ai"
-          value="--" 
-          icon={<Bot className="h-5 w-5 text-[var(--rzp-ai)]" />} 
-        />
-        <MetricCard 
-          title="AI Conversion" 
-          badge="SIMULATED"
-          badgeColor="ai"
-          value="--" 
-          icon={<LineChart className="h-5 w-5 text-[var(--rzp-ai)]" />} 
-        />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Recent Transactions</CardTitle>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 px-2 py-1 rounded">Real Data</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <ReceiptTextIcon className="h-12 w-12 text-gray-300 mb-4" />
-              <p className="text-[var(--rzp-text-secondary)] font-medium">No recent transactions</p>
-              <p className="text-sm text-[var(--rzp-text-muted)] mt-1">When customers purchase, orders will appear here.</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>AI Readiness</CardTitle>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)] px-2 py-1 rounded">Simulated</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-             <div className="flex flex-col items-center justify-center py-6 text-center">
-              <div className="w-24 h-24 rounded-full border-4 border-gray-200 flex items-center justify-center mb-4">
-                <span className="text-2xl font-bold text-gray-400">--</span>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--rzp-text-muted)] flex items-center">
+            <span className="w-2 h-2 rounded-full bg-[var(--rzp-success)] mr-2"></span>
+            Real Catalogue Operations
+          </h2>
+          <span className="text-xs text-[var(--rzp-text-muted)] font-medium">Source: Canonical Database</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Catalogue Items</span>
+                <div className="p-2 bg-[var(--rzp-primary-soft)] rounded-lg text-[var(--rzp-primary)]">
+                  <Package className="h-5 w-5" />
+                </div>
               </div>
-              <p className="text-sm font-medium">Not evaluated</p>
-              <p className="text-xs text-[var(--rzp-text-muted)] mt-1">Run an optimization scan to get your score.</p>
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-[var(--rzp-text)]">
+                  {loading ? '...' : products.length}
+                </p>
+                <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
+                  {activeProducts} active in agent discovery
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Available Stock</span>
+                <div className="p-2 bg-[var(--rzp-success-soft)] rounded-lg text-[var(--rzp-success)]">
+                  <Layers className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-[var(--rzp-text)]">
+                  {loading ? '...' : totalInventory.toLocaleString()}
+                </p>
+                <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
+                  Authoritative inventory units
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Categories Covered</span>
+                <div className="p-2 bg-[var(--rzp-info-soft)] rounded-lg text-[var(--rzp-info)]">
+                  <Activity className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-[var(--rzp-text)]">
+                  {loading ? '...' : categories.length}
+                </p>
+                <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
+                  {categories.slice(0, 2).join(', ')}{categories.length > 2 ? ` +${categories.length - 2}` : ''}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Actionable Recs</span>
+                <div className="p-2 bg-[var(--rzp-ai-soft)] rounded-lg text-[var(--rzp-ai)]">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-[var(--rzp-text)]">
+                  {loading ? '...' : recommendations.length}
+                </p>
+                <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
+                  Friction-derived opportunities
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Intelligence Pipeline Flow: Understand -> Simulate -> Optimize */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Step 1: Simulations */}
+        <Card className="flex flex-col justify-between hover:shadow-md transition-shadow border-t-4 border-t-[var(--rzp-ai)]">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)] px-2 py-0.5 rounded">
+                Step 1: Diagnose
+              </span>
+              <Bot className="h-5 w-5 text-[var(--rzp-ai)]" />
+            </div>
+            <CardTitle className="text-lg mt-2">Synthetic Buyer Simulation</CardTitle>
+            <p className="text-xs text-[var(--rzp-text-muted)]">
+              Evaluate how autonomous personas (Budget, Speed, Quality, Feature) evaluate your prices and delivery times.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[var(--rzp-surface-subtle)] p-3 rounded-lg border border-[var(--rzp-border)] text-xs text-[var(--rzp-text-secondary)] space-y-1.5">
+              <div className="flex items-center text-[var(--rzp-text)] font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[var(--rzp-success)] mr-1.5 shrink-0" />
+                Deterministic Scoring Engine
+              </div>
+              <p>Detect hard constraint rejections & soft ranking frictions across 5 personas.</p>
+            </div>
+            <div className="mt-4">
+              <Link to="/simulation">
+                <Button variant="ai" className="w-full" size="sm">
+                  Launch Simulator <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Step 2: Recommendations */}
+        <Card className="flex flex-col justify-between hover:shadow-md transition-shadow border-t-4 border-t-[var(--rzp-warning)]">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-[var(--rzp-warning-soft)] text-[var(--rzp-warning)] px-2 py-0.5 rounded">
+                Step 2: Understand
+              </span>
+              <Sparkles className="h-5 w-5 text-[var(--rzp-warning)]" />
+            </div>
+            <CardTitle className="text-lg mt-2">Friction Insights & Recs</CardTitle>
+            <p className="text-xs text-[var(--rzp-text-muted)]">
+              Actionable recommendations derived from empirical buyer agent rejections in your catalogue.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[var(--rzp-surface-subtle)] p-3 rounded-lg border border-[var(--rzp-border)] text-xs text-[var(--rzp-text-secondary)] space-y-1.5">
+              <div className="flex items-center text-[var(--rzp-text)] font-medium">
+                <AlertCircle className="h-3.5 w-3.5 text-[var(--rzp-warning)] mr-1.5 shrink-0" />
+                Evidence-Based Rationale
+              </div>
+              <p>
+                {recommendations.length > 0
+                  ? `${recommendations.length} optimization opportunities ready for review.`
+                  : 'Run buyer simulations to automatically generate friction-based recommendations.'}
+              </p>
+            </div>
+            <div className="mt-4">
+              <Link to="/optimization">
+                <Button variant="outline" className="w-full" size="sm">
+                  View Recommendations <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Step 3: What-If Experimentation */}
+        <Card className="flex flex-col justify-between hover:shadow-md transition-shadow border-t-4 border-t-[var(--rzp-primary)]">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-[var(--rzp-primary-soft)] text-[var(--rzp-primary)] px-2 py-0.5 rounded">
+                Step 3: Experiment
+              </span>
+              <TestTube className="h-5 w-5 text-[var(--rzp-primary)]" />
+            </div>
+            <CardTitle className="text-lg mt-2">What-If Optimization</CardTitle>
+            <p className="text-xs text-[var(--rzp-text-muted)]">
+              Simulate price drops, delivery promise improvements, or metadata enrichment in-memory with 0 database risk.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[var(--rzp-surface-subtle)] p-3 rounded-lg border border-[var(--rzp-border)] text-xs text-[var(--rzp-text-secondary)] space-y-1.5">
+              <div className="flex items-center text-[var(--rzp-text)] font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[var(--rzp-primary)] mr-1.5 shrink-0" />
+                Zero Production Mutation
+              </div>
+              <p>Compute expected baseline vs simulated selection rate deltas safely.</p>
+            </div>
+            <div className="mt-4">
+              <Link to="/optimization">
+                <Button variant="primary" className="w-full" size="sm">
+                  Run What-If Analysis <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Top Active Recommendation Highlight if available */}
+      {recommendations.length > 0 && (
+        <Card className="border-[var(--rzp-ai)] bg-gradient-to-r from-purple-50/50 via-white to-white">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="h-5 w-5 text-[var(--rzp-ai)]" />
+                <CardTitle className="text-base text-[var(--rzp-text)]">Top Optimization Opportunity</CardTitle>
+              </div>
+              <span className="text-xs font-semibold text-[var(--rzp-ai)] bg-[var(--rzp-ai-soft)] px-2.5 py-0.5 rounded-full">
+                Confidence: {(recommendations[0].confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="font-semibold text-sm text-[var(--rzp-text)]">{recommendations[0].title}</h4>
+                <p className="text-xs text-[var(--rzp-text-secondary)] max-w-2xl">{recommendations[0].reason}</p>
+                <div className="flex items-center gap-4 text-xs font-medium pt-1 text-[var(--rzp-text-muted)]">
+                  <span>Type: <strong className="text-[var(--rzp-text)]">{recommendations[0].type}</strong></span>
+                  <span>Simulated Impact: <strong className="text-[var(--rzp-success)]">+{(recommendations[0].expected_simulated_impact * 100).toFixed(0)}%</strong></span>
+                </div>
+              </div>
+              <Link to="/optimization">
+                <Button variant="ai" size="sm" className="whitespace-nowrap">
+                  Test with What-If <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
 
-const MetricCard = ({ title, value, badge, badgeColor, icon }: any) => (
-  <Card>
-    <CardContent className="p-5">
-      <div className="flex justify-between items-start mb-2">
-        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-          badgeColor === 'ai' ? 'bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)]' : 'bg-gray-100 text-gray-600'
-        }`}>
-          {badge}
-        </span>
-        <div className="p-1.5 bg-gray-50 rounded-lg">
-          {icon}
-        </div>
-      </div>
-      <div>
-        <p className="text-sm font-medium text-[var(--rzp-text-muted)]">{title}</p>
-        <p className="text-2xl font-bold text-[var(--rzp-text)] mt-1">{value}</p>
-      </div>
-    </CardContent>
-  </Card>
-);
-
-const ReceiptTextIcon = (props: any) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
-    <path d="M14 8H8" /><path d="M16 12H8" /><path d="M13 16H8" />
+const PlayIcon = (props: any) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+    <polygon points="5 3 19 12 5 21 5 3" />
   </svg>
-)
+);

@@ -29,6 +29,11 @@ export const Catalogue = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(price / 100);
   };
 
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase()) || 
+    p.category.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -79,14 +84,14 @@ export const Catalogue = () => {
                       Loading products...
                     </td>
                   </tr>
-                ) : products.length === 0 ? (
+                ) : filteredProducts.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-8 text-center text-[var(--rzp-text-muted)]">
                       No products found.
                     </td>
                   </tr>
                 ) : (
-                  products.map((product) => (
+                  filteredProducts.map((product) => (
                     <tr key={product.id} className="border-b border-[var(--rzp-border)] hover:bg-gray-50/50">
                       <td className="px-6 py-4">
                         <div className="font-medium text-[var(--rzp-text)]">{product.name}</div>

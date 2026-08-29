@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WhatIfRequest(BaseModel):
-    merchant_id: uuid.UUID
     hypothesis: str = Field(min_length=3, max_length=500)
     modifications: Dict[str, Any] = Field(default_factory=dict)
 

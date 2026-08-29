@@ -6,7 +6,7 @@ from app.schemas.buyer.intent import StructuredIntent
 
 
 class SimulationCreate(BaseModel):
-    merchant_id: uuid.UUID
+    merchant_id: Optional[uuid.UUID] = None
     scenario_count: int = Field(default=10, ge=1, le=100)
     buyer_profiles: List[str] = Field(default_factory=lambda: ["BUDGET", "QUALITY", "SPEED"])
     intent: Optional[StructuredIntent] = None

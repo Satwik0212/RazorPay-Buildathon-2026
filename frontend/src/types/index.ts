@@ -117,12 +117,112 @@ export interface Payment {
   status: 'PENDING' | 'SUCCESS' | 'FAILED';
 }
 
-export interface SimulationResult {
+export interface BuyerPersona {
+  id: string;
+  name: string;
+  description: string;
+  budget_min: number;
+  budget_max: number;
+  priorities: string[];
+  urgency: string;
+  weights: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SimulationFriction {
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  reason: string;
+  description?: string;
+  confidence?: number;
+  [key: string]: any;
+}
+
+export interface SimulationRanking {
+  product_id: string;
+  score: number;
+  rank: number;
+}
+
+export interface SimulationResultItem {
+  persona_name: string;
+  selected_product_id: string | null;
+  score: number;
+  constraints_satisfied: boolean;
+  reason_codes: string[];
+  frictions: SimulationFriction[];
+  rankings: SimulationRanking[];
+  explanation: string;
+}
+
+export interface SimulationSummaryMetrics {
+  buyers_simulated: number;
+  successful_matches: number;
+  failed_matches: number;
+  constraint_satisfaction_rate: number;
+  average_score: number;
+  friction_distribution?: Record<string, number>;
+  persona_success_rates?: Record<string, number>;
+  metric_type?: string;
+}
+
+export interface SimulationResponse {
+  simulation_id: string;
+  merchant_id: string;
+  status: string;
+  scenario_count: number;
+  buyer_profiles: string[];
+  summary_metrics: SimulationSummaryMetrics;
+  results: SimulationResultItem[];
+  created_at: string;
+}
+
+export interface Recommendation {
   id: string;
   merchant_id: string;
-  persona_id: string;
-  scenario: Record<string, any>;
-  outcome: 'PURCHASE' | 'ABANDON' | 'ERROR';
-  friction_points: string[];
-  decision_time_ms: number;
+  simulation_run_id?: string | null;
+  product_id?: string | null;
+  type: string;
+  title: string;
+  reason: string;
+  action_data: Record<string, any>;
+  expected_simulated_impact: number;
+  confidence: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WhatIfRequest {
+  hypothesis: string;
+  modifications: {
+    product_id?: string;
+    price?: number;
+    delivery_days?: number;
+    return_days?: number;
+    metadata?: Record<string, any>;
+    [key: string]: any;
+  };
+}
+
+export interface WhatIfMetrics {
+  simulated_selection_rate?: number;
+  average_score?: number;
+  matches?: number;
+  total_scenarios?: number;
+  conversion_rate?: number;
+  average_order_value?: number;
+  metric_type?: string;
+  [key: string]: any;
+}
+
+export interface WhatIfResponse {
+  id: string;
+  merchant_id: string;
+  hypothesis: string;
+  modifications: Record<string, any>;
+  baseline_metrics: WhatIfMetrics;
+  simulated_metrics: WhatIfMetrics;
+  delta_percentage: number;
+  created_at: string;
 }

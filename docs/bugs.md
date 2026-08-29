@@ -382,3 +382,27 @@ The dead stub files create cosmetic confusion. Sanji should delete them or add a
 9. Is it hiding missing backend data? **No** — it prevents a 500 error for new merchants with empty catalogues, which is a reasonable UX fallback for a simulation tool.
 
 **Classification: LEGITIMATE SIMULATION FIXTURE** — Not a bug. The synthetic catalogue serves only to demonstrate what-if analysis capability to merchants who have not yet created products. All outputs are correctly labelled as simulated.
+
+
+# BUG-012 - Pydantic schema contract mismatch for Optimization API
+
+- Severity: MEDIUM
+- Category: API Contract
+- Status: **FIXED**
+- Discovered: 2026-08-29
+- Discovered by: Zoro (Frontend)
+- Affected files: backend/app/schemas/optimization/simulation.py, backend/app/schemas/optimization/what_if.py, frontend/src/api/simulation.ts, frontend/src/types/index.ts, frontend/src/pages/merchant/Dashboard.tsx, SimulationDashboard.tsx, Optimization.tsx, Analytics.tsx
+
+## Problem
+The backend optimization endpoints (/simulations, /what-if, /recommendations) were hardened to derive merchant identity from the JWT context rather than relying on a client-supplied merchant_id. However, the Pydantic schemas SimulationCreate and WhatIfRequest still strictly required merchant_id to be passed in the request body. If the frontend correctly stopped sending the redundant and untrusted merchant_id, the backend returned a 422 Unprocessable Entity validation error.
+
+## Root Cause Verification
+Direct source inspection showed merchant_id: uuid.UUID was required in SimulationCreate and WhatIfRequest. The implementation logic in simulations.py and what_if.py completely ignored this field and correctly used current_merchant.id, creating an impossible contract for the frontend to fulfill securely.
+
+## Impact
+Frontend requests were failing with 422 when attempting to comply with the new security model. Keeping merchant_id in the frontend payload violated the security guideline against client-supplied identity.
+
+## Fix
+- Removed merchant_id from SimulationCreate and WhatIfRequest backend schemas.
+- Removed merchant_id from frontend TypeScript types, API definitions, and React component API calls.
+- Both frontend and backend contracts are now reconciled around the JWT identity context.
