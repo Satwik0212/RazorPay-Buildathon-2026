@@ -1,6 +1,8 @@
 import uuid
 import sys
 import os
+from typing import Optional
+from sqlalchemy.orm import Session
 
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -14,9 +16,12 @@ from app.security.authentication import hash_password
 from app.core.constants import UserRole
 
 
-def seed_demo_data():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+def seed_demo_data(db: Optional[Session] = None):
+    should_close = False
+    if db is None:
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        should_close = True
 
     try:
         print("[+] Seeding P0 Demo Data...")
@@ -181,7 +186,8 @@ def seed_demo_data():
         print(f"[ERROR] Error seeding database: {e}")
         raise
     finally:
-        db.close()
+        if should_close:
+            db.close()
 
 
 if __name__ == "__main__":

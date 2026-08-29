@@ -12,6 +12,5 @@ class PolicyUpdate(BaseModel):
 
 
 class PolicyCheckRequest(BaseModel):
-    merchant_id: uuid.UUID
     amount: int = Field(ge=0)
     category: Optional[str] = None

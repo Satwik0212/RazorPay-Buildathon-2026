@@ -8,6 +8,8 @@ from app.models.order import Order
 from app.repositories.webhook_repository import WebhookRepository
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.order_repository import OrderRepository
+from app.repositories.product_repository import ProductRepository
+from app.repositories.cart_repository import CartRepository
 from app.security.webhook_verification import validate_webhook_signature_or_raise
 from app.core.exceptions import WebhookSignatureError, ValidationError
 from app.core.constants import PaymentStatus, OrderStatus, ActorType, AuditEventType
@@ -21,6 +23,8 @@ class WebhookService:
         self.webhook_repo = WebhookRepository(db)
         self.payment_repo = PaymentRepository(db)
         self.order_repo = OrderRepository(db)
+        self.product_repo = ProductRepository(db)
+        self.cart_repo = CartRepository(db)
         self.audit_service = AuditService(db)
 
     def process_razorpay_webhook(
@@ -118,6 +122,41 @@ class WebhookService:
             order.status = OrderStatus.REVIEW_REQUIRED.value
             self.order_repo.update_status(order.id, OrderStatus.REVIEW_REQUIRED.value)
             return
+
+        if order.status == OrderStatus.PAID.value:
+            logger.info(f"Order {order.id} is already PAID. Skipping duplicate processing.")
+            return
+
+        # ATOMIC INVENTORY DECREMENT
+        cart = self.cart_repo.get_by_id(order.cart_id)
+        if cart and cart.items:
+            item_quantities = {}
+            for item in cart.items:
+                item_quantities[item.product_id] = item_quantities.get(item.product_id, 0) + item.quantity
+            
+            try:
+                with self.db.begin_nested():
+                    for product_id, quantity in item_quantities.items():
+                        success = self.product_repo.decrement_inventory(product_id, quantity)
+                        if not success:
+                            raise ValueError(f"Insufficient inventory for product {product_id}")
+            except ValueError as exc:
+                logger.error(f"Order {order.id} failed inventory decrement: {exc}")
+                order.status = OrderStatus.REVIEW_REQUIRED.value
+                self.order_repo.update_status(order.id, OrderStatus.REVIEW_REQUIRED.value)
+                
+                self.audit_service.log_event(
+                    event_type=AuditEventType.WEBHOOK_FAILED.value,
+                    actor_type=ActorType.WEBHOOK.value,
+                    entity_type="order",
+                    merchant_id=order.merchant_id,
+                    entity_id=order.id,
+                    event_data={
+                        "razorpay_payment_id": razorpay_payment_id,
+                        "reason": str(exc),
+                    },
+                )
+                return
 
         # Check or create payment record
         existing_payment = self.payment_repo.get_by_razorpay_payment_id(razorpay_payment_id)

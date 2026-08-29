@@ -81,3 +81,14 @@ class ProductRepository:
             self.db.commit()
             self.db.refresh(inv)
         return inv
+
+    def decrement_inventory(self, product_id: uuid.UUID, quantity: int) -> bool:
+        from sqlalchemy import update
+        stmt = (
+            update(Inventory)
+            .where(Inventory.product_id == product_id)
+            .where(Inventory.available_quantity >= quantity)
+            .values(available_quantity=Inventory.available_quantity - quantity)
+        )
+        result = self.db.execute(stmt)
+        return result.rowcount > 0

@@ -1,0 +1,14 @@
+    from app.models.quote import Quote
+    from datetime import datetime, timezone, timedelta
+    quote = Quote(
+        cart_id=cart.id, subtotal=3000, discount=0, shipping=0, tax=0,
+        total=3000, currency="INR", quote_hash="h",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        line_items_snapshot=[]
+    )
+    db_session.add(quote)
+    db_session.commit()
+    auth = Authorization(
+        customer_id=customer.id, quote_id=quote.id,
+        amount=3000, currency="INR", status=AuthorizationStatus.APPROVED.value
+    )

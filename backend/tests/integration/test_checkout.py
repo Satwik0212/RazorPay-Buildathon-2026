@@ -122,7 +122,10 @@ def test_end_to_end_checkout_and_webhook_flow(client):
     assert wh_resp.json()["status"] == "success"
 
     # 10. Query Payment Status
-    status_resp = client.get(f"/api/v1/orders/{order_id}/payment-status")
+    status_resp = client.get(
+        f"/api/v1/orders/{order_id}/payment-status",
+        headers={"Authorization": f"Bearer {c_token}"}
+    )
     assert status_resp.status_code == 200
     assert status_resp.json()["status"] == "PAID"
     assert status_resp.json()["amount"] == 499900

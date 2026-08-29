@@ -1,69 +1,139 @@
-from typing import List, Dict, Any
 import uuid
+from typing import List, Dict, Any, Optional
 from .scoring import ProductScorer
-from .friction import FrictionDetector
-from app.schemas.optimization.simulations import SimulationResponse, SimulationRanking
+from .friction import FrictionDetector, FrictionReason
+
 
 class SimulationEngine:
+    """
+    Core deterministic simulation orchestrator.
+    Evaluates synthetic buyer personas against merchant catalogue data.
+    """
+
     def run_simulation(
-        self, 
-        merchant_id: str, 
-        persona_weights: Dict[str, float], 
-        intent: Dict[str, Any], 
-        catalogue: List[Dict[str, Any]]
-    ) -> SimulationResponse:
-        
+        self,
+        merchant_id: str,
+        persona_weights: Dict[str, float],
+        intent: Dict[str, Any],
+        catalogue: List[Dict[str, Any]],
+        persona_name: str = "SYNTHETIC_BUYER"
+    ) -> Dict[str, Any]:
+        """
+        Executes a single deterministic simulation.
+        Flow:
+          Catalogue -> Hard Constraint Filtering -> Persona Scoring -> Ranking -> Selection & Friction Explanation
+        """
         candidates = []
-        rankings = []
-        
+        all_evaluated_rankings = []
+        observed_frictions = []
+
+        max_budget = intent.get("max_budget")
+
         for product in catalogue:
+            p_id = str(product.get("id"))
+            p_name = product.get("name", "Product")
+
+            # 1. Hard constraint filter
             hard_friction = FrictionDetector.detect_hard_constraints(product, intent)
             if hard_friction:
-                rankings.append(SimulationRanking(
-                    product_id=str(product.get("id")),
-                    score=0.0,
-                    rank=999,
-                    friction_reasons=[f.value for f in hard_friction]
-                ))
+                friction_names = [f.value for f in hard_friction]
+                for fn in friction_names:
+                    observed_frictions.append({
+                        "product_id": p_id,
+                        "product_name": p_name,
+                        "type": "HARD_CONSTRAINT",
+                        "reason": fn,
+                    })
+                all_evaluated_rankings.append({
+                    "product_id": p_id,
+                    "product_name": p_name,
+                    "score": 0.0,
+                    "rank": 999,
+                    "frictions": friction_names,
+                    "passed": False,
+                })
                 continue
-                
+
+            # 2. Soft friction evaluation
             soft_friction = FrictionDetector.detect_soft_friction(product, persona_weights)
-            score = ProductScorer.calculate_score(product, persona_weights)
-            
+            soft_friction_names = [f.value for f in soft_friction]
+            for fn in soft_friction_names:
+                observed_frictions.append({
+                    "product_id": p_id,
+                    "product_name": p_name,
+                    "type": "SOFT_FRICTION",
+                    "reason": fn,
+                })
+
+            # 3. Preference-weighted score calculation
+            score = ProductScorer.calculate_score(product, persona_weights, max_budget)
+
             candidates.append({
-                "product": product,
+                "product_id": p_id,
+                "product_name": p_name,
                 "score": score,
-                "friction": [f.value for f in soft_friction]
+                "friction_reasons": soft_friction_names,
+                "product": product,
             })
-            
+
         # Sort candidates descending by score
         candidates.sort(key=lambda x: x["score"], reverse=True)
-        
-        # Populate rankings for candidates
+
+        rankings = []
         for i, c in enumerate(candidates):
-            rankings.append(SimulationRanking(
-                product_id=str(c["product"].get("id")),
-                score=c["score"],
-                rank=i+1,
-                friction_reasons=c["friction"]
-            ))
-            
-        selected_product = None
-        explanation = None
-        
+            rankings.append({
+                "product_id": c["product_id"],
+                "product_name": c["product_name"],
+                "score": c["score"],
+                "rank": i + 1,
+                "frictions": c["friction_reasons"],
+                "passed": True,
+            })
+
+        # Append failed products at the end
+        rankings.extend([r for r in all_evaluated_rankings if not r["passed"]])
+
+        selected_product_id = None
+        selected_score = 0.0
+        reason_codes = []
+        explanation = ""
+        constraints_satisfied = False
+
         if candidates:
             best = candidates[0]
-            selected_product = str(best["product"].get("id"))
-            
-            # This is where LLM could generate a real explanation based on the facts
-            explanation = f"Selected because it scored {best['score']}."
-            
-        return SimulationResponse(
-            simulation_id=str(uuid.uuid4()),
-            selected_product=selected_product,
-            rankings=rankings,
-            explanation=explanation,
-            constraints_satisfied=bool(candidates)
-        )
+            selected_product_id = best["product_id"]
+            selected_score = best["score"]
+            constraints_satisfied = True
+
+            # Reason codes
+            reason_codes.append("CONSTRAINTS_SATISFIED")
+            if best["score"] >= 0.75:
+                reason_codes.append("HIGH_PERSONA_AFFINITY")
+            if max_budget and best["product"].get("price", 0) <= max_budget:
+                reason_codes.append("PRICE_FIT")
+
+            explanation = (
+                f"SIMULATED: Product '{best['product_name']}' selected by {persona_name} "
+                f"with score {best['score']:.3f} (ranked #1 of {len(catalogue)} evaluated items)."
+            )
+        else:
+            explanation = (
+                f"SIMULATED: {persona_name} rejected all {len(catalogue)} products due to constraint friction "
+                f"(budget limits, missing requirements, or stock availability)."
+            )
+            reason_codes.append("NO_MATCHING_PRODUCTS")
+
+        return {
+            "simulation_id": str(uuid.uuid4()),
+            "persona_name": persona_name,
+            "selected_product_id": selected_product_id,
+            "score": selected_score,
+            "constraints_satisfied": constraints_satisfied,
+            "reason_codes": reason_codes,
+            "frictions": observed_frictions,
+            "rankings": rankings,
+            "explanation": explanation,
+        }
+
 
 simulation_engine = SimulationEngine()

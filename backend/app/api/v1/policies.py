@@ -30,10 +30,14 @@ def update_policy(
 
 
 @router.post("/check", response_model=PolicyCheckResponse)
-def check_policy(req: PolicyCheckRequest, db: Session = Depends(get_db)):
+def check_policy(
+    req: PolicyCheckRequest,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db)
+):
     service = PolicyService(db)
     status, reason = service.evaluate_transaction(
-        merchant_id=req.merchant_id,
+        merchant_id=current_merchant.id,
         amount=req.amount,
         categories=[req.category] if req.category else [],
         is_ai_agent=True,

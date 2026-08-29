@@ -1,20 +1,22 @@
-from app.schemas.buyer.intent import BuyerIntent
+from app.schemas.buyer.intent import StructuredIntent, BuyerIntent
 from app.integrations.llm.client import llm_client
+from app.ai.prompt_safety import PromptSafety
+
 
 class IntentParser:
-    def parse(self, text: str) -> BuyerIntent:
+    """
+    Translates untrusted buyer natural language prompts into validated StructuredIntent.
+    Protects against prompt injection and ensures deterministic Pydantic schema validation.
+    """
+
+    def parse(self, text: str) -> StructuredIntent:
         """
         Parses natural language into structured BuyerIntent.
         """
-        # Ensure we wrap the text clearly to avoid prompt injection (safety regulation)
-        prompt = f"""
-        Extract the buyer's intent from the following text.
-        
-        <untrusted_buyer_text>
-        {text}
-        </untrusted_buyer_text>
-        """
-        
-        return llm_client.generate_structured(prompt, BuyerIntent)
+        sanitized = PromptSafety.sanitize_input(text)
+        safe_prompt = PromptSafety.wrap_untrusted_content("untrusted_buyer_text", sanitized)
+
+        return llm_client.generate_structured(safe_prompt, StructuredIntent)
+
 
 intent_parser = IntentParser()
