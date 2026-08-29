@@ -56,7 +56,46 @@ def test_api_buyer_personas_list_and_create():
 
 
 def test_api_what_if_analysis():
-    merchant_id = str(uuid.uuid4())
+    # 1. Register merchant to get auth token
+    unique_email = f"whatif_{uuid.uuid4().hex[:8]}@test.com"
+    m_reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": unique_email, "password": "password12345", "role": "MERCHANT"},
+    )
+    assert m_reg.status_code == 201
+    m_token = m_reg.json()["access_token"]
+    merchant_id = m_reg.json()["user"]["merchant_id"]
+    headers = {"Authorization": f"Bearer {m_token}"}
+
+    # 2. Verify empty catalogue rejects What-If simulation without fabricating products
+    empty_res = client.post(
+        "/api/v1/optimization/what-if",
+        json={
+            "merchant_id": merchant_id,
+            "hypothesis": "Test hypothesis on empty catalogue",
+            "modifications": {"delivery_days": 2}
+        },
+        headers=headers
+    )
+    assert empty_res.status_code == 422
+    assert "empty" in empty_res.json()["error"]["message"].lower()
+
+    # 3. Add a real product for the merchant
+    prod_res = client.post(
+        "/api/v1/products",
+        json={
+            "name": "Real Test Headphones",
+            "description": "Real headphones for what-if test",
+            "category": "headphones",
+            "price": 299900,
+            "currency": "INR",
+            "metadata": {"delivery_days": 5, "return_days": 7}
+        },
+        headers=headers
+    )
+    assert prod_res.status_code == 201
+
+    # 4. Verify What-If simulation succeeds for merchant with real products
     res = client.post(
         "/api/v1/optimization/what-if",
         json={
@@ -66,7 +105,8 @@ def test_api_what_if_analysis():
                 "delivery_days": 2,
                 "metadata": {"has_discount": True}
             }
-        }
+        },
+        headers=headers
     )
     assert res.status_code == 200
     data = res.json()

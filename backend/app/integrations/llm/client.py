@@ -21,7 +21,7 @@ class LLMClient:
         # 1. Category extraction
         categories = [
             "laptop", "notebook", "headphones", "earphones", "earbuds",
-            "smartphone", "phone", "mobile", "keyboard", "mouse",
+            "microphone", "mic", "smartphone", "phone", "mobile", "keyboard", "mouse",
             "monitor", "display", "smartwatch", "watch", "camera",
             "tablet", "speaker", "audio", "clothing", "shoes", "backpack",
             "electronics", "accessories"
@@ -29,24 +29,29 @@ class LLMClient:
         category = None
         for cat in categories:
             if re.search(r'\b' + re.escape(cat) + r'\b', text):
-                category = "laptop" if cat == "notebook" else (
-                    "headphones" if cat in ["earphones", "earbuds"] else (
-                        "phone" if cat in ["smartphone", "mobile"] else (
-                            "monitor" if cat == "display" else (
-                                "watch" if cat == "smartwatch" else cat
-                            )
-                        )
-                    )
-                )
+                if cat == "notebook":
+                    category = "laptop"
+                elif cat in ["earphones", "earbuds"]:
+                    category = "headphones"
+                elif cat == "mic":
+                    category = "microphone"
+                elif cat in ["smartphone", "mobile"]:
+                    category = "phone"
+                elif cat == "display":
+                    category = "monitor"
+                elif cat == "smartwatch":
+                    category = "watch"
+                else:
+                    category = cat
                 break
 
         # 2. Budget extraction (Amounts parsed into minor units / paise)
         max_budget = None
         min_budget = None
 
-        # Matches: "under 50000", "below 60k", "under ₹5,000", "less than 70,000", "under 50 k", "under 60000"
+        # Matches: "under 50000", "below 60k", "under ₹5,000", "around ₹20,000", "about 1000", "budget of 15000"
         max_match = re.search(
-            r'(?:under|below|less than|max(?:imum)?(?: of)?|budget(?: of)?|upto|up to)\s*(?:rs\.?|inr|₹)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?)\s*(k|thousand|lakh|lac|m|million)?',
+            r'(?:under|below|less than|max(?:imum)?(?: of)?|budget(?: of)?|upto|up to|around|approx(?:imately)?|about|for|near)\s*(?:rs\.?|inr|₹)?\s*([0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?)\s*(k|thousand|lakh|lac|m|million)?',
             text
         )
         if max_match:
@@ -131,12 +136,17 @@ class LLMClient:
         pref_keywords = [
             ("high performance", "high_performance"),
             ("premium", "premium"),
+            ("cheapest", "budget_friendly"),
             ("cheap", "budget_friendly"),
             ("budget", "budget_friendly"),
             ("lightweight", "lightweight"),
             ("durable", "durable"),
+            ("good battery", "long_battery_life"),
             ("long battery", "long_battery_life"),
+            ("battery life", "long_battery_life"),
             ("battery backup", "long_battery_life"),
+            ("audio quality", "high_audio_quality"),
+            ("sound quality", "high_audio_quality"),
             ("black", "color_black"),
             ("silver", "color_silver"),
             ("ergonomic", "ergonomic"),
@@ -156,7 +166,6 @@ class LLMClient:
             "preferences": preferences,
         }
 
-        # Return instantiated and validated schema
         return schema(**data)
 
 

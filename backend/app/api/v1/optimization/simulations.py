@@ -37,14 +37,22 @@ def _resolve_persona_weights(profile_name: str) -> Dict[str, float]:
     return PERSONA_PROFILE_MAP["BALANCED"]
 
 
+from app.security.authentication import get_current_merchant
+from app.models.merchant import User
+
 @router.post("/simulations", response_model=SimulationResponse, status_code=status.HTTP_200_OK)
-def run_simulation(req: SimulationCreate, db: Session = Depends(get_db)):
+def run_simulation(
+    req: SimulationCreate,
+    db: Session = Depends(get_db),
+    current_merchant: User = Depends(get_current_merchant)
+):
     """
     Executes synchronous, deterministic buyer simulations against the merchant's catalogue.
     Evaluates real buyer personas, applies hard/soft constraints, and detects friction.
     """
+    merchant_id = current_merchant.id
     product_service = ProductService(db)
-    db_products, _ = product_service.list_products(merchant_id=req.merchant_id, limit=100)
+    db_products, _ = product_service.list_products(merchant_id=merchant_id, limit=100)
 
     # Convert DB products to dictionary catalogue format
     catalogue: List[Dict[str, Any]] = []
@@ -127,7 +135,7 @@ def run_simulation(req: SimulationCreate, db: Session = Depends(get_db)):
 
     return SimulationResponse(
         simulation_id=sim_id,
-        merchant_id=req.merchant_id,
+        merchant_id=merchant_id,
         status="COMPLETED",
         scenario_count=total_simulated,
         buyer_profiles=profiles,

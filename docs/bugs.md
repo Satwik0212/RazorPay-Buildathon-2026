@@ -346,6 +346,7 @@ The dead stub files create cosmetic confusion. Sanji should delete them or add a
 | BUG-008 | Unauthenticated policy check endpoint          | HIGH     | FIXED                      | Luffy  |
 | BUG-009 | Unauthenticated payment status endpoints       | MEDIUM   | FIXED                      | Luffy  |
 | BUG-010 | Missing AI/simulation test coverage            | LOW      | CLOSED — FALSE POSITIVE    | —      |
+| BUG-011 | Missing Merchant Isolation on AI Endpoints     | CRITICAL | FIXED                      | Luffy  |
 
 ---
 

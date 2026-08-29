@@ -8,17 +8,26 @@ from app.schemas.optimization.what_if import WhatIfRequest, WhatIfResponse
 from app.services.product_service import ProductService
 from app.services.optimization.what_if_service import what_if_service
 
+from app.core.exceptions import ValidationError
+from app.security.authentication import get_current_merchant
+from app.models.merchant import User
+
 router = APIRouter(prefix="/optimization", tags=["Optimization & What-If"])
 
 
 @router.post("/what-if", response_model=WhatIfResponse, status_code=status.HTTP_200_OK)
-def run_what_if_analysis(req: WhatIfRequest, db: Session = Depends(get_db)):
+def run_what_if_analysis(
+    req: WhatIfRequest,
+    db: Session = Depends(get_db),
+    current_merchant: User = Depends(get_current_merchant)
+):
     """
     Executes a what-if catalogue optimization experiment in memory.
     Evaluates baseline catalogue vs proposed parameter changes without modifying database records.
     """
+    merchant_id = current_merchant.id
     product_service = ProductService(db)
-    db_products, _ = product_service.list_products(merchant_id=req.merchant_id, limit=50)
+    db_products, _ = product_service.list_products(merchant_id=merchant_id, limit=50)
 
     # Convert DB products to dictionary catalogue format
     catalogue: List[Dict[str, Any]] = []
@@ -36,24 +45,11 @@ def run_what_if_analysis(req: WhatIfRequest, db: Session = Depends(get_db)):
             "available_quantity": inv_qty,
         })
 
-    # If no DB products exist yet for this merchant, create a baseline mock catalogue for testing
     if not catalogue:
-        catalogue = [
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Standard Laptop Pro",
-                "description": "Standard business laptop",
-                "category": "laptop",
-                "price": 549900,
-                "currency": "INR",
-                "is_active": True,
-                "product_metadata": {"delivery_days": 5, "return_days": 7},
-                "available_quantity": 20,
-            }
-        ]
+        raise ValidationError("Merchant catalogue is empty. Cannot execute what-if analysis on an empty catalogue.")
 
     comparison = what_if_service.run_what_if(
-        merchant_id=str(req.merchant_id),
+        merchant_id=str(merchant_id),
         hypothesis=req.hypothesis,
         baseline_catalogue=catalogue,
         modifications=req.modifications,
@@ -61,7 +57,7 @@ def run_what_if_analysis(req: WhatIfRequest, db: Session = Depends(get_db)):
 
     return WhatIfResponse(
         id=uuid.uuid4(),
-        merchant_id=req.merchant_id,
+        merchant_id=merchant_id,
         hypothesis=req.hypothesis,
         modifications=req.modifications,
         baseline_metrics=comparison["baseline_metrics"],

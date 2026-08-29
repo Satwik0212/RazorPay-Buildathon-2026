@@ -34,6 +34,7 @@ def parse_buyer_intent(req: BuyerIntentRequest):
 def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db)):
     """
     Search and rank catalogue products based on buyer requirements and preferences.
+    Grounded in real database products.
     """
     service = ProductService(db)
     # Fetch active products matching category and/or budget constraints
@@ -43,6 +44,15 @@ def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db))
         is_active=True,
         limit=50,
     )
+
+    if not products and req.category:
+        # Resilient fallback: search across product name / corpus if exact category mismatch
+        products, _ = service.list_products(
+            search=req.category,
+            max_price=req.max_budget,
+            is_active=True,
+            limit=50,
+        )
 
     results: List[SearchResultItem] = []
     for p in products:

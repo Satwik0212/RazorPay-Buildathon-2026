@@ -12,17 +12,19 @@ from app.simulation.friction import FrictionDetector
 router = APIRouter(prefix="/optimization", tags=["Optimization & Recommendations"])
 
 
+from app.security.authentication import get_current_merchant
+from app.models.merchant import User
+
 @router.get("/recommendations", response_model=List[RecommendationResponse])
 def list_recommendations(
-    merchant_id: Optional[uuid.UUID] = Query(default=None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_merchant: User = Depends(get_current_merchant)
 ):
     """
     Retrieve or generate explainable optimization recommendations for a merchant.
     Derives recommendations directly from detected catalogue friction points.
     """
-    if not merchant_id:
-        return []
+    merchant_id = current_merchant.id
 
     # Fetch catalogue for merchant and evaluate real friction
     product_service = ProductService(db)
