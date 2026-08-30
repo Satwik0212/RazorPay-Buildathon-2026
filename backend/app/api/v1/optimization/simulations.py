@@ -73,6 +73,7 @@ def run_simulation(
     sim_id = uuid.uuid4()
     results: List[SimulationResultItem] = []
     friction_summary: Dict[str, int] = {}
+    detailed_frictions: List[Dict[str, Any]] = []
     persona_success_count: Dict[str, int] = {}
 
     # Run simulation iterations
@@ -107,6 +108,11 @@ def run_simulation(
         for f in sim_output.get("frictions", []):
             reason_name = f.get("reason", "UNKNOWN")
             friction_summary[reason_name] = friction_summary.get(reason_name, 0) + 1
+            detailed_frictions.append({
+                "product_id": f.get("product_id"),
+                "reason": reason_name,
+                "count": 1
+            })
 
         # Track persona success
         if sim_output["constraints_satisfied"]:
@@ -131,6 +137,11 @@ def run_simulation(
     failed_matches = total_simulated - successful_matches
     satisfaction_rate = round(successful_matches / max(total_simulated, 1), 3)
     avg_score = round(sum(r.score for r in results) / max(total_simulated, 1), 3)
+
+    # Persist the collected friction evidence as actionable recommendations
+    if detailed_frictions:
+        from app.services.optimization.recommendation_service import recommendation_service
+        recommendation_service.generate_recommendations(db, merchant_id, detailed_frictions)
 
     return SimulationResponse(
         simulation_id=sim_id,

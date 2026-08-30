@@ -16,6 +16,7 @@ from app.api.v1.buyer.personas import router as buyer_personas_router
 from app.api.v1.optimization.simulations import router as simulations_router
 from app.api.v1.optimization.recommendations import router as recommendations_router
 from app.api.v1.optimization.what_if import router as what_if_router
+from app.api.v1.analytics import router as analytics_router
 
 api_v1_router = APIRouter()
 
@@ -32,6 +33,7 @@ api_v1_router.include_router(checkout_router)
 api_v1_router.include_router(payments_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(audit_router)
+api_v1_router.include_router(analytics_router)
 
 # Shared AI / Buyer / Simulation Boundaries (Sanji integration)
 api_v1_router.include_router(buyer_intents_router)

@@ -101,7 +101,10 @@ def test_recommendation_generation():
         {"product_id": str(p2), "reason": FrictionReason.PRICE_MISMATCH.value, "count": 20},
     ]
 
-    recs = recommendation_service.generate_recommendations(merchant_id, events)
+    from unittest.mock import MagicMock
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+    recs = recommendation_service.generate_recommendations(mock_db, merchant_id, events)
     assert len(recs) == 2
 
     assert recs[0].type == "DELIVERY_CLARITY"

@@ -226,3 +226,12 @@ export interface WhatIfResponse {
   delta_percentage: number;
   created_at: string;
 }
+
+export interface MerchantOverviewAnalytics {
+  total_products: number;
+  active_products: number;
+  total_inventory: number;
+  total_categories: number;
+  total_personas: number;
+  total_recommendations: number;
+}

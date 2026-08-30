@@ -12,27 +12,25 @@ import {
   Layers, 
   TestTube,
   ShoppingBag,
-  Activity
+  Activity,
+  Users
 } from 'lucide-react';
-import { productsApi } from '../../api/products';
+import { analyticsApi } from '../../api/analytics';
 import { simulationApi } from '../../api/simulation';
-import { authApi } from '../../api/auth';
-import type { Product, Recommendation } from '../../types';
+import type { Recommendation, MerchantOverviewAnalytics } from '../../types';
 
 export const Dashboard = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [analytics, setAnalytics] = useState<MerchantOverviewAnalytics | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const prodRes = await productsApi.getProducts();
-        const items = prodRes.data.items || [];
-        setProducts(items);
+        const overviewRes = await analyticsApi.getOverview();
+        setAnalytics(overviewRes.data);
 
         try {
-          const merchantId = await authApi.getOrInitMerchantId();
           const recRes = await simulationApi.getRecommendations();
           setRecommendations(recRes.data || []);
         } catch {
@@ -47,10 +45,6 @@ export const Dashboard = () => {
 
     fetchDashboardData();
   }, []);
-
-  const totalInventory = products.reduce((acc, p) => acc + (p.inventory?.available_quantity || 0), 0);
-  const activeProducts = products.filter(p => p.is_active).length;
-  const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean)));
 
   return (
     <div className="space-y-8">
@@ -85,7 +79,7 @@ export const Dashboard = () => {
           </h2>
           <span className="text-xs text-[var(--rzp-text-muted)] font-medium">Source: Canonical Database</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
           <Card>
             <CardContent className="p-5">
               <div className="flex justify-between items-start">
@@ -96,10 +90,10 @@ export const Dashboard = () => {
               </div>
               <div className="mt-2">
                 <p className="text-2xl font-bold text-[var(--rzp-text)]">
-                  {loading ? '...' : products.length}
+                  {loading ? '...' : (analytics?.total_products ?? 0)}
                 </p>
                 <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
-                  {activeProducts} active in agent discovery
+                  {loading ? '...' : (analytics?.active_products ?? 0)} active in discovery
                 </p>
               </div>
             </CardContent>
@@ -115,10 +109,10 @@ export const Dashboard = () => {
               </div>
               <div className="mt-2">
                 <p className="text-2xl font-bold text-[var(--rzp-text)]">
-                  {loading ? '...' : totalInventory.toLocaleString()}
+                  {loading ? '...' : (analytics?.total_inventory ?? 0).toLocaleString()}
                 </p>
                 <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
-                  Authoritative inventory units
+                  Authoritative units
                 </p>
               </div>
             </CardContent>
@@ -127,17 +121,36 @@ export const Dashboard = () => {
           <Card>
             <CardContent className="p-5">
               <div className="flex justify-between items-start">
-                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Categories Covered</span>
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Categories</span>
                 <div className="p-2 bg-[var(--rzp-info-soft)] rounded-lg text-[var(--rzp-info)]">
                   <Activity className="h-5 w-5" />
                 </div>
               </div>
               <div className="mt-2">
                 <p className="text-2xl font-bold text-[var(--rzp-text)]">
-                  {loading ? '...' : categories.length}
+                  {loading ? '...' : (analytics?.total_categories ?? 0)}
                 </p>
                 <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
-                  {categories.slice(0, 2).join(', ')}{categories.length > 2 ? ` +${categories.length - 2}` : ''}
+                  Active taxonomies
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold text-[var(--rzp-text-muted)] uppercase tracking-wider">Personas</span>
+                <div className="p-2 bg-[var(--rzp-warning-soft)] rounded-lg text-[var(--rzp-warning)]">
+                  <Users className="h-5 w-5" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-2xl font-bold text-[var(--rzp-text)]">
+                  {loading ? '...' : (analytics?.total_personas ?? 0)}
+                </p>
+                <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
+                  Configured buyer types
                 </p>
               </div>
             </CardContent>
@@ -153,10 +166,10 @@ export const Dashboard = () => {
               </div>
               <div className="mt-2">
                 <p className="text-2xl font-bold text-[var(--rzp-text)]">
-                  {loading ? '...' : recommendations.length}
+                  {loading ? '...' : (analytics?.total_recommendations ?? 0)}
                 </p>
                 <p className="text-xs text-[var(--rzp-text-secondary)] mt-1">
-                  Friction-derived opportunities
+                  Evidence-backed
                 </p>
               </div>
             </CardContent>
