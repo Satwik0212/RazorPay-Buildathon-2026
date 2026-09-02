@@ -80,7 +80,7 @@ export const RecommendationPipelineHeader: React.FC<RecommendationPipelineHeader
           AI Commerce Intelligence Pipeline
         </span>
         <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
-          Click any step to navigate stages
+          Click any step to switch stages (01 Simulation → 02 Friction → 03 Insight → 04 Action)
         </span>
       </div>
 
@@ -105,7 +105,7 @@ export const RecommendationPipelineHeader: React.FC<RecommendationPipelineHeader
                 className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                   isCurrent
                     ? 'bg-[var(--rzp-ai)] text-white shadow-sm'
-                    : 'bg-gray-200 text-gray-700 group-hover:bg-purple-100'
+                    : 'bg-gray-200 text-gray-700'
                 }`}
               >
                 <Icon className="h-4 w-4" />

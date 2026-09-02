@@ -1,3 +1,4 @@
+from tests.helpers import create_test_merchant
 import pytest
 import uuid
 from fastapi.testclient import TestClient
@@ -6,7 +7,7 @@ def test_multi_scenario_simulation_produces_variation(client, db_session):
     """Verify running multiple scenarios for one persona does not simply return identical scenario inputs/results."""
     # 1. Register a merchant
     unique_email = f"merchant_{uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"})
+    reg = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
@@ -43,7 +44,7 @@ def test_explicit_intent_overrides_but_count_still_runs(client, db_session):
     """Verify that explicit intent remains respected and exactly scenario_count results are returned."""
     # 1. Register a merchant
     unique_email = f"merchant_{uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"})
+    reg = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     

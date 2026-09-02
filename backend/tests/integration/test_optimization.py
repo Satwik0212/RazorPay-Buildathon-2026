@@ -1,14 +1,12 @@
+from tests.helpers import create_test_merchant
 import uuid
 import pytest
 
 
-def test_simulation_api_end_to_end(client):
+def test_simulation_api_end_to_end(client, db_session):
     # 1. Register merchant user
     unique_email = f"merchant_sim_{uuid.uuid4().hex[:8]}@example.com"
-    reg_res = client.post(
-        "/api/v1/auth/register",
-        json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"}
-    )
+    reg_res = create_test_merchant(db_session, unique_email, "Password123!")
     assert reg_res.status_code == 201
     token = reg_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -95,14 +93,14 @@ def test_simulation_api_end_to_end(client):
 def test_merchant_isolation_and_lifecycle(client, db_session):
     # 1. Register Merchant A
     unique_email_a = f"merchant_a_{uuid.uuid4().hex[:8]}@example.com"
-    reg_a = client.post("/api/v1/auth/register", json={"email": unique_email_a, "password": "Password123!", "role": "MERCHANT"})
+    reg_a = create_test_merchant(db_session, unique_email_a, "Password123!")
     token_a = reg_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
     merch_a_id = client.get("/api/v1/merchants/me", headers=headers_a).json()["id"]
 
     # 2. Register Merchant B
     unique_email_b = f"merchant_b_{uuid.uuid4().hex[:8]}@example.com"
-    reg_b = client.post("/api/v1/auth/register", json={"email": unique_email_b, "password": "Password123!", "role": "MERCHANT"})
+    reg_b = create_test_merchant(db_session, unique_email_b, "Password123!")
     token_b = reg_b.json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
     merch_b_id = client.get("/api/v1/merchants/me", headers=headers_b).json()["id"]
@@ -150,7 +148,7 @@ def test_recommendation_application_semantics(client, db_session):
     import uuid
     # Register merchant
     unique_email = f"merchant_c_{uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"})
+    reg = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     merch_id = client.get("/api/v1/merchants/me", headers=headers).json()["id"]
@@ -221,7 +219,7 @@ def test_recommendation_application_semantics(client, db_session):
     import uuid
     # Register merchant
     unique_email = f"merchant_c_{uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"})
+    reg = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     merch_id = client.get("/api/v1/merchants/me", headers=headers).json()["id"]
@@ -327,7 +325,7 @@ def test_recommendation_apply_audit(client, db_session):
     import uuid
     # Register merchant
     unique_email = f"merchant_audit_{uuid.uuid4().hex[:8]}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"})
+    reg = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     merch_id = client.get("/api/v1/merchants/me", headers=headers).json()["id"]

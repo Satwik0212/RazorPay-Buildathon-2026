@@ -1,3 +1,4 @@
+from tests.helpers import create_test_merchant
 """
 Regression tests: Product → Inventory → Catalogue API → Simulation data consistency.
 
@@ -13,11 +14,10 @@ from fastapi.testclient import TestClient
 # Shared helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def register_merchant(client) -> dict:
+def register_merchant(client, db_session) -> dict:
     """Register a unique merchant and return {'token': ..., 'headers': ..., 'merchant_id': ...}."""
     email = f"inv_test_{uuid.uuid4().hex[:8]}@example.com"
-    res = client.post('/api/v1/auth/register',
-                      json={'email': email, 'password': 'Password123!', 'role': 'MERCHANT'})
+    res = create_test_merchant(db_session, email, 'Password123!')
     assert res.status_code == 201, res.json()
     token = res.json()['access_token']
     headers = {'Authorization': f'Bearer {token}'}
@@ -45,11 +45,10 @@ def add_product(client, headers, name, price, qty, metadata=None):
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestAuthWiring:
-    def test_register_and_login_round_trip(self, client):
+    def test_register_and_login_round_trip(self, client, db_session):
         """Registering a merchant and logging in returns a consistent merchant_id."""
         email = f"wiring_{uuid.uuid4().hex[:8]}@example.com"
-        reg = client.post('/api/v1/auth/register',
-                          json={'email': email, 'password': 'Password123!', 'role': 'MERCHANT'})
+        reg = create_test_merchant(db_session, email, 'Password123!')
         assert reg.status_code == 201
         # merchant_id is nested inside the 'user' object in the register response
         reg_merchant_id = reg.json()['user']['merchant_id']
@@ -63,10 +62,10 @@ class TestAuthWiring:
         assert me.status_code == 200
         assert me.json()['merchant_id'] == reg_merchant_id
 
-    def test_merchant_isolation_in_catalogue(self, client):
+    def test_merchant_isolation_in_catalogue(self, client, db_session):
         """Two merchants only see their own products."""
-        m1 = register_merchant(client)
-        m2 = register_merchant(client)
+        m1 = register_merchant(client, db_session)
+        m2 = register_merchant(client, db_session)
 
         add_product(client, m1['headers'], 'Merchant 1 Widget', 100, 50)
         add_product(client, m2['headers'], 'Merchant 2 Gadget', 200, 30)
@@ -88,9 +87,9 @@ class TestAuthWiring:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestInventoryCatalogueConsistency:
-    def test_catalogue_api_includes_inventory_field(self, client):
+    def test_catalogue_api_includes_inventory_field(self, client, db_session):
         """Every product in the catalogue API response must have an inventory field."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'Stocked Product', 50000, 100)
 
         res = client.get('/api/v1/products', headers=m['headers'])
@@ -101,9 +100,9 @@ class TestInventoryCatalogueConsistency:
             assert 'inventory' in item, f"Product {item['name']} missing inventory"
             assert item['inventory'] is not None
 
-    def test_api_inventory_qty_matches_initial_quantity(self, client):
+    def test_api_inventory_qty_matches_initial_quantity(self, client, db_session):
         """Product created with initial_quantity=75 should show 75 in the API."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'Known Stock Product', 99900, 75)
 
         res = client.get('/api/v1/products', headers=m['headers'])
@@ -112,9 +111,9 @@ class TestInventoryCatalogueConsistency:
         assert product is not None
         assert product['inventory']['available_quantity'] == 75
 
-    def test_zero_stock_product_shows_zero_in_api(self, client):
+    def test_zero_stock_product_shows_zero_in_api(self, client, db_session):
         """Product with initial_quantity=0 must show 0 in catalogue API."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'Out Of Stock Product', 49900, 0)
 
         res = client.get('/api/v1/products', headers=m['headers'])
@@ -123,9 +122,9 @@ class TestInventoryCatalogueConsistency:
         assert product is not None
         assert product['inventory']['available_quantity'] == 0
 
-    def test_inventory_update_reflects_in_catalogue_api(self, client):
+    def test_inventory_update_reflects_in_catalogue_api(self, client, db_session):
         """Updating inventory via PATCH must be visible in the next GET /products call."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         p = add_product(client, m['headers'], 'Updatable Product', 99900, 10)
         product_id = p['id']
 
@@ -142,9 +141,9 @@ class TestInventoryCatalogueConsistency:
         assert product is not None
         assert product['inventory']['available_quantity'] == 999
 
-    def test_mixed_inventory_distribution_visible_in_api(self, client):
+    def test_mixed_inventory_distribution_visible_in_api(self, client, db_session):
         """Catalogue API correctly shows a mix of in-stock and out-of-stock products."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'In Stock A', 10000, 50)
         add_product(client, m['headers'], 'In Stock B', 20000, 5)
         add_product(client, m['headers'], 'Out of Stock C', 30000, 0)
@@ -163,9 +162,9 @@ class TestInventoryCatalogueConsistency:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestSimulationInventoryConsistency:
-    def test_simulation_hard_rejects_zero_stock_product(self, client):
+    def test_simulation_hard_rejects_zero_stock_product(self, client, db_session):
         """A product with qty=0 must appear in frictions as INVENTORY_ISSUE, not be selected."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'Must Reject Zero Stock', 50000, 0,
                     metadata={'delivery_days': 1, 'rating': 5.0, 'warranty': True,
                               'return_days': 30, 'discount_percent': 50})
@@ -186,9 +185,9 @@ class TestSimulationInventoryConsistency:
         fd = sim.json()['summary_metrics']['friction_distribution']
         assert fd.get('INVENTORY_ISSUE', 0) > 0
 
-    def test_simulation_selects_in_stock_product(self, client):
+    def test_simulation_selects_in_stock_product(self, client, db_session):
         """When one product is in stock and one is not, the in-stock one must be selected."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         in_stock = add_product(client, m['headers'], 'Available Product', 99900, 50,
                                metadata={'delivery_days': 2, 'rating': 4.5, 'warranty': True,
                                          'return_days': 30, 'discount_percent': 10})
@@ -204,12 +203,12 @@ class TestSimulationInventoryConsistency:
         assert result['constraints_satisfied'] is True
         assert result['selected_product_id'] == in_stock['id']
 
-    def test_simulation_receives_same_qty_as_catalogue_api(self, client):
+    def test_simulation_receives_same_qty_as_catalogue_api(self, client, db_session):
         """
         The product selected by the simulation must have qty > 0 per the Catalogue API.
         Proves catalogue and simulation read from the same inventory data.
         """
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         add_product(client, m['headers'], 'Consistent Stock A', 45000, 75,
                     metadata={'delivery_days': 1, 'rating': 4.3, 'warranty': True, 'return_days': 15})
         add_product(client, m['headers'], 'Zero Stock B', 45000, 0,
@@ -236,9 +235,9 @@ class TestSimulationInventoryConsistency:
                 f"shows qty={catalogue_qty} — data mismatch"
             )
 
-    def test_simulation_inventory_issue_not_100_percent_when_stock_available(self, client):
+    def test_simulation_inventory_issue_not_100_percent_when_stock_available(self, client, db_session):
         """If most products are in stock, INVENTORY_ISSUE should not dominate frictions."""
-        m = register_merchant(client)
+        m = register_merchant(client, db_session)
         # Add 5 in-stock products, 1 out-of-stock
         for i in range(5):
             add_product(client, m['headers'], f'In Stock Product {i}', 50000 + i * 10000, 50,

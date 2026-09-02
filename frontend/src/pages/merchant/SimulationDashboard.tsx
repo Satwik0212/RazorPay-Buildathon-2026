@@ -2,44 +2,61 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { 
-  Bot, 
-  Play, 
-  ShieldAlert, 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  Sparkles, 
-  ArrowRight, 
-  Filter, 
+import {
+  Bot,
+  Play,
+  ShieldAlert,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  ArrowRight,
+  Filter,
   Sliders,
   ChevronDown,
   ChevronUp,
-  Lightbulb
+  Lightbulb,
+  Scale,
+  TrendingUp,
+  TrendingDown,
+  Minus
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { personasApi } from '../../api/personas';
 import { productsApi } from '../../api/products';
 import { authApi } from '../../api/auth';
 import type { BuyerPersona, Product, SimulationResponse } from '../../types';
-import { RecommendationPipelineHeader, type PipelineStepId } from '../../components/features/recommendations';
+import { RecommendationPipelineHeader, type PipelineStepId, formatPriceInINR } from '../../components/features/recommendations';
 
 export const SimulationDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const stepParam = searchParams.get('step') as PipelineStepId | null;
-  const currentStep: PipelineStepId = (stepParam === 'friction' || stepParam === 'insight') ? stepParam : 'simulation';
+  const currentStep: PipelineStepId = (stepParam === 'friction') ? 'friction' : 'simulation';
 
   const [simulating, setSimulating] = useState(false);
   const [results, setResults] = useState<SimulationResponse | null>(null);
+  const [baselineRun, setBaselineRun] = useState<SimulationResponse | null>(null);
   const [error, setError] = useState('');
-  
+
   // Personas & Products
   const [personas, setPersonas] = useState<BuyerPersona[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [scenarioCount, setScenarioCount] = useState<number>(10);
   const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // Restore previous run or baseline from sessionStorage
+  useEffect(() => {
+    try {
+      const savedBaseline = sessionStorage.getItem('simulation_baseline_run');
+      if (savedBaseline) {
+        setBaselineRun(JSON.parse(savedBaseline));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Scroll to section when step param changes
   useEffect(() => {
@@ -48,9 +65,6 @@ export const SimulationDashboard: React.FC = () => {
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     } else if (stepParam === 'simulation') {
       const el = document.getElementById('simulation-section');
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
-    } else if (stepParam === 'insight') {
-      const el = document.getElementById('logs-section') || document.getElementById('simulation-section');
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
   }, [stepParam, results]);
@@ -115,7 +129,16 @@ export const SimulationDashboard: React.FC = () => {
     try {
       const realMerchantId = await authApi.getOrInitMerchantId();
       if (!realMerchantId) throw new Error("No merchant session found.");
-      
+
+      if (results) {
+        setBaselineRun(results);
+        try {
+          sessionStorage.setItem('simulation_baseline_run', JSON.stringify(results));
+        } catch {
+          // ignore
+        }
+      }
+
       const res = await simulationApi.runSimulation({
         scenario_count: scenarioCount,
         buyer_profiles: selectedProfiles
@@ -126,10 +149,6 @@ export const SimulationDashboard: React.FC = () => {
     } finally {
       setSimulating(false);
     }
-  };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(price / 100);
   };
 
   const getPersonaIcon = (name: string) => {
@@ -145,6 +164,19 @@ export const SimulationDashboard: React.FC = () => {
   const totalFrictionSignals = results?.summary_metrics?.friction_distribution
     ? Object.values(results.summary_metrics.friction_distribution).reduce((a, b) => a + b, 0)
     : 0;
+
+  const baselineFrictionSignals = baselineRun?.summary_metrics?.friction_distribution
+    ? Object.values(baselineRun.summary_metrics.friction_distribution).reduce((a, b) => a + b, 0)
+    : 0;
+
+  const matchRateDelta = results && baselineRun
+    ? Number((((results.summary_metrics.constraint_satisfaction_rate || 0) - (baselineRun.summary_metrics.constraint_satisfaction_rate || 0)) * 100).toFixed(1))
+    : null;
+
+  const avgScoreDelta = results && baselineRun
+    ? Number(((results.summary_metrics.average_score || 0) - (baselineRun.summary_metrics.average_score || 0)).toFixed(2))
+    : null;
+
 
   return (
     <div className="space-y-6 pb-12">
@@ -167,14 +199,14 @@ export const SimulationDashboard: React.FC = () => {
 
       {/* Visual Analytical Pipeline Header */}
       <RecommendationPipelineHeader currentStep={currentStep} onStepClick={handleStepClick} />
-      
+
       {/* Simulation Truth & Safety Notice */}
       <div className="bg-[var(--rzp-warning-soft)] p-3.5 rounded-lg border border-[var(--rzp-warning)] flex items-start text-xs text-[var(--rzp-warning)]">
         <ShieldAlert className="h-5 w-5 mr-2.5 shrink-0" />
         <div>
           <p className="font-semibold text-sm text-[var(--rzp-text)]">Simulated Analytical Environment</p>
           <p className="mt-0.5 text-[var(--rzp-text-secondary)]">
-            All simulation scores, matches, and rejections are calculated by the deterministic AI evaluation engine. Results do <strong>NOT</strong> modify database catalogue state or fabricate production revenue.
+            All simulation scores, matches, and rejections are calculated by the deterministic AI evaluation engine. Results reflect simulated persona constraint satisfaction and do <strong>NOT</strong> fabricate production revenue.
           </p>
         </div>
       </div>
@@ -194,64 +226,64 @@ export const SimulationDashboard: React.FC = () => {
               <CardTitle className="text-base flex items-center font-bold">
                 <Sliders className="h-4 w-4 mr-2 text-[var(--rzp-primary)]" /> Simulation Parameters
               </CardTitle>
-            <span className="text-xs text-[var(--rzp-text-muted)] font-medium">Target: Active Catalogue Items</span>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-[var(--rzp-text-muted)] block mb-2">
-              Select Target Buyer Personas
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {personas.map(persona => {
-                const profileCode = persona.name.split(' ')[0].toUpperCase();
-                const isSelected = selectedProfiles.includes(profileCode);
-                return (
+              <span className="text-xs text-[var(--rzp-text-muted)] font-medium">Target: Active Catalogue Items</span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--rzp-text-muted)] block mb-2">
+                Select Target Buyer Personas
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {personas.map(persona => {
+                  const profileCode = persona.name.split(' ')[0].toUpperCase();
+                  const isSelected = selectedProfiles.includes(profileCode);
+                  return (
+                    <button
+                      key={persona.id}
+                      type="button"
+                      onClick={() => toggleProfile(profileCode)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        isSelected
+                          ? 'bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)] text-[var(--rzp-ai)] shadow-xs'
+                          : 'bg-white border-[var(--rzp-border)] text-[var(--rzp-text-muted)] hover:bg-gray-50'
+                      }`}
+                    >
+                      {getPersonaIcon(persona.name)} {persona.name}
+                    </button>
+                  );
+                })}
+                {personas.length === 0 && (
+                  <span className="text-xs text-gray-500 italic">Loading personas from database...</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[var(--rzp-border)]">
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-semibold text-[var(--rzp-text-secondary)]">Scenario Volume:</span>
+                {[5, 10, 20].map(cnt => (
                   <button
-                    key={persona.id}
+                    key={cnt}
                     type="button"
-                    onClick={() => toggleProfile(profileCode)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                      isSelected
-                        ? 'bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)] text-[var(--rzp-ai)] shadow-xs'
-                        : 'bg-white border-[var(--rzp-border)] text-[var(--rzp-text-muted)] hover:bg-gray-50'
+                    onClick={() => setScenarioCount(cnt)}
+                    className={`px-3 py-1 rounded-md text-xs font-bold border transition-all ${
+                      scenarioCount === cnt
+                        ? 'bg-[var(--rzp-primary)] text-white border-[var(--rzp-primary)] shadow-2xs'
+                        : 'bg-white text-[var(--rzp-text-secondary)] border-[var(--rzp-border)] hover:bg-gray-50'
                     }`}
                   >
-                    {getPersonaIcon(persona.name)} {persona.name}
+                    {cnt} Scenarios
                   </button>
-                );
-              })}
-              {personas.length === 0 && (
-                <span className="text-xs text-gray-500 italic">Loading personas from database...</span>
-              )}
-            </div>
-          </div>
+                ))}
+              </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[var(--rzp-border)]">
-            <div className="flex items-center space-x-3">
-              <span className="text-xs font-semibold text-[var(--rzp-text-secondary)]">Scenario Volume:</span>
-              {[5, 10, 20].map(cnt => (
-                <button
-                  key={cnt}
-                  type="button"
-                  onClick={() => setScenarioCount(cnt)}
-                  className={`px-3 py-1 rounded-md text-xs font-bold border transition-all ${
-                    scenarioCount === cnt
-                      ? 'bg-[var(--rzp-primary)] text-white border-[var(--rzp-primary)] shadow-2xs'
-                      : 'bg-white text-[var(--rzp-text-secondary)] border-[var(--rzp-border)] hover:bg-gray-50'
-                  }`}
-                >
-                  {cnt} Scenarios
-                </button>
-              ))}
+              <div className="text-xs text-[var(--rzp-text-muted)] font-medium">
+                Evaluates hard constraint filters + soft scoring trade-offs
+              </div>
             </div>
-
-            <div className="text-xs text-[var(--rzp-text-muted)] font-medium">
-              Evaluates hard constraint filters + soft scoring trade-offs
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Loading State */}
@@ -267,7 +299,7 @@ export const SimulationDashboard: React.FC = () => {
                 Evaluating Persona Decision Trees...
               </h3>
               <p className="text-xs text-[var(--rzp-text-muted)] mt-1">
-                Executing constraint checks across {scenarioCount} simulated buyer scenarios
+                Executing constraint checks across {scenarioCount} simulated buyer scenarios against live catalogue state
               </p>
             </div>
           </CardContent>
@@ -292,9 +324,130 @@ export const SimulationDashboard: React.FC = () => {
         </Card>
       )}
 
+
       {/* Live Simulation Results */}
       {results && !simulating && (
         <div className="space-y-6 animate-in fade-in duration-300">
+          {/* SECTION: BEFORE vs AFTER SIMULATION COMPARISON (WHEN BASELINE EXISTS) */}
+          {baselineRun && (
+            <Card className="border-2 border-[var(--rzp-primary)] shadow-sm bg-gradient-to-br from-white via-purple-50/20 to-white">
+              <CardHeader className="pb-3 border-b border-[var(--rzp-border)]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2">
+                    <Scale className="h-5 w-5 text-[var(--rzp-primary)]" />
+                    <CardTitle className="text-base font-bold text-[var(--rzp-text)]">
+                      Before vs After Simulation Evaluation
+                    </CardTitle>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-900 px-2 py-0.5 rounded border border-purple-200">
+                      SIMULATED RESULT
+                    </span>
+                    <Link to="/transactions" className="text-xs text-[var(--rzp-primary)] font-semibold hover:underline">
+                      Audit Trail →
+                    </Link>
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--rzp-text-muted)]">
+                  Measured comparison between the baseline simulation and the post-intervention simulation.
+                </p>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                {/* Metric Delta Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  {/* Match Rate */}
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                      Simulated Match Rate
+                    </span>
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-gray-400 line-through">
+                        {((baselineRun.summary_metrics.constraint_satisfaction_rate || 0) * 100).toFixed(1)}%
+                      </span>
+                      <ArrowRight className="h-3 w-3 text-gray-400 inline" />
+                      <span className="text-base font-black text-[var(--rzp-text)]">
+                        {((results.summary_metrics.constraint_satisfaction_rate || 0) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    {matchRateDelta !== null && (
+                      <div className={`text-[11px] font-bold flex items-center ${
+                        matchRateDelta > 0 ? 'text-emerald-600' : matchRateDelta === 0 ? 'text-gray-500' : 'text-amber-600'
+                      }`}>
+                        {matchRateDelta > 0 ? <TrendingUp className="h-3 w-3 mr-1" /> : matchRateDelta === 0 ? <Minus className="h-3 w-3 mr-1" /> : <TrendingDown className="h-3 w-3 mr-1" />}
+                        {matchRateDelta > 0 ? `+${matchRateDelta}% Delta` : `${matchRateDelta}% Delta`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Avg Persona Score */}
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                      Avg Persona Score
+                    </span>
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-gray-400 line-through">
+                        {(baselineRun.summary_metrics.average_score || 0).toFixed(2)}
+                      </span>
+                      <ArrowRight className="h-3 w-3 text-gray-400 inline" />
+                      <span className="text-base font-black text-[var(--rzp-text)]">
+                        {(results.summary_metrics.average_score || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    {avgScoreDelta !== null && (
+                      <div className={`text-[11px] font-bold flex items-center ${
+                        avgScoreDelta > 0 ? 'text-emerald-600' : avgScoreDelta === 0 ? 'text-gray-500' : 'text-amber-600'
+                      }`}>
+                        {avgScoreDelta > 0 ? `+${avgScoreDelta} Score Delta` : `${avgScoreDelta} Score Delta`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Friction Count */}
+                  <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
+                      Recorded Friction Signals
+                    </span>
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-gray-400 line-through">{baselineFrictionSignals}</span>
+                      <ArrowRight className="h-3 w-3 text-gray-400 inline" />
+                      <span className="text-base font-black text-[var(--rzp-danger)]">{totalFrictionSignals}</span>
+                    </div>
+                    <span className="text-[11px] text-gray-500">
+                      {totalFrictionSignals < baselineFrictionSignals
+                        ? `Reduced by ${baselineFrictionSignals - totalFrictionSignals} signals`
+                        : `${totalFrictionSignals} total observed`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Honest Verdict Banner */}
+                <div className={`p-3 rounded-lg text-xs font-semibold border ${
+                  matchRateDelta !== null && matchRateDelta > 0
+                    ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    : matchRateDelta === 0
+                    ? 'bg-gray-100 text-gray-700 border-gray-300'
+                    : 'bg-amber-50 text-amber-900 border-amber-200'
+                }`}>
+                  {matchRateDelta !== null && matchRateDelta > 0 ? (
+                    <span>
+                      ✓ <strong>SIMULATED IMPROVEMENT:</strong> Constraint satisfaction increased from{' '}
+                      {((baselineRun.summary_metrics.constraint_satisfaction_rate || 0) * 100).toFixed(1)}% to{' '}
+                      {((results.summary_metrics.constraint_satisfaction_rate || 0) * 100).toFixed(1)}% (+{matchRateDelta}%) across evaluated buyer scenarios.
+                    </span>
+                  ) : matchRateDelta === 0 ? (
+                    <span>
+                      ℹ <strong>No measurable improvement observed in this simulation.</strong> Buyer persona constraints produced identical match counts under current scenario configurations.
+                    </span>
+                  ) : (
+                    <span>
+                      ⚠ <strong>Simulated match rate shifted:</strong> {matchRateDelta}%. Review persona trade-offs and constraint sensitivities.
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Transition Highlight Banner */}
           <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 via-indigo-50 to-white border border-[var(--rzp-ai)] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center space-x-3">
@@ -306,14 +459,14 @@ export const SimulationDashboard: React.FC = () => {
                   Simulation Complete: {totalFrictionSignals} Friction {totalFrictionSignals === 1 ? 'Signal' : 'Signals'} Detected
                 </h3>
                 <p className="text-xs text-[var(--rzp-text-secondary)]">
-                  The AI scoring engine has mapped these drop-offs to actionable catalogue interventions.
+                  The AI scoring engine has mapped these constraint drop-offs into actionable catalogue interventions.
                 </p>
               </div>
             </div>
 
-            <Link to="/optimization">
+            <Link to="/optimization?step=action">
               <Button variant="primary" size="sm" className="whitespace-nowrap shadow-sm font-semibold">
-                <Sparkles className="h-3.5 w-3.5 mr-1.5" /> View Recommendations <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" /> View Recommendations (Step 4) <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             </Link>
           </div>
@@ -372,7 +525,7 @@ export const SimulationDashboard: React.FC = () => {
             </Card>
           </div>
 
-          {/* Friction Diagnostics Section */}
+          {/* Friction Diagnostics Section (STEP 2: BUYER FRICTION) */}
           {results.summary_metrics.friction_distribution && Object.keys(results.summary_metrics.friction_distribution).length > 0 && (
             <div id="friction-section" className="scroll-mt-6">
               <Card className="border-l-4 border-l-[var(--rzp-warning)]">
@@ -380,7 +533,7 @@ export const SimulationDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center text-[var(--rzp-text)] font-bold">
                       <AlertTriangle className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" />
-                      Detected Buyer Friction Distribution
+                      Detected Buyer Friction Distribution (Stage 02)
                     </CardTitle>
                     <span className="text-xs font-semibold text-[var(--rzp-warning)] bg-[var(--rzp-warning-soft)] px-2.5 py-0.5 rounded-full border border-amber-200">
                       {totalFrictionSignals} friction signals
@@ -416,127 +569,127 @@ export const SimulationDashboard: React.FC = () => {
                     Inspect the step-by-step evaluation, product match, and constraint checks for each scenario.
                   </p>
                 </div>
-                <Link to="/optimization">
+                <Link to="/optimization?step=action">
                   <Button variant="outline" size="sm" className="font-semibold">
                     <Sparkles className="h-3.5 w-3.5 mr-1.5 text-[var(--rzp-ai)]" /> View Recommendations
                   </Button>
                 </Link>
               </CardHeader>
               <CardContent>
-              <div className="space-y-3">
-                {results.results.map((item, idx) => {
-                  const isExpanded = expandedRow === idx;
-                  const matchedProduct = item.selected_product_id ? productsMap[item.selected_product_id] : null;
+                <div className="space-y-3">
+                  {results.results.map((item, idx) => {
+                    const isExpanded = expandedRow === idx;
+                    const matchedProduct = item.selected_product_id ? productsMap[item.selected_product_id] : null;
 
-                  return (
-                    <div 
-                      key={idx} 
-                      className={`border rounded-lg p-4 transition-all ${
-                        item.constraints_satisfied
-                          ? 'border-[var(--rzp-border)] bg-white hover:border-gray-300'
-                          : 'border-red-200 bg-red-50/20'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-xs font-bold text-gray-400 font-mono">#{idx + 1}</span>
-                          <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)]">
-                            {item.persona_name}
-                          </span>
-                          <span className="text-sm font-semibold text-[var(--rzp-text)]">
-                            {matchedProduct ? matchedProduct.name : 'No Product Matched'}
-                          </span>
-                          {matchedProduct && (
-                            <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
-                              ({formatPrice(matchedProduct.price)})
+                    return (
+                      <div
+                        key={idx}
+                        className={`border rounded-lg p-4 transition-all ${
+                          item.constraints_satisfied
+                            ? 'border-[var(--rzp-border)] bg-white hover:border-gray-300'
+                            : 'border-red-200 bg-red-50/20'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xs font-bold text-gray-400 font-mono">#{idx + 1}</span>
+                            <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)]">
+                              {item.persona_name}
                             </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-3">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex items-center ${
-                            item.constraints_satisfied
-                              ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)]'
-                              : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)]'
-                          }`}>
-                            {item.constraints_satisfied ? (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Match Score: {(item.score * 100).toFixed(0)}%
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="h-3.5 w-3.5 mr-1" /> Rejection
-                              </>
+                            <span className="text-sm font-semibold text-[var(--rzp-text)]">
+                              {matchedProduct ? matchedProduct.name : 'No Product Matched'}
+                            </span>
+                            {matchedProduct && (
+                              <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
+                                ({formatPriceInINR(matchedProduct.price)})
+                              </span>
                             )}
-                          </span>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => setExpandedRow(isExpanded ? null : idx)}
-                            className="p-1 hover:bg-gray-100 rounded text-gray-500"
-                          >
-                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                          </button>
+                          <div className="flex items-center space-x-3">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex items-center ${
+                              item.constraints_satisfied
+                                ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)]'
+                                : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)]'
+                            }`}>
+                              {item.constraints_satisfied ? (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Match Score: {(item.score * 100).toFixed(0)}%
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="h-3.5 w-3.5 mr-1" /> Rejection
+                                </>
+                              )}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRow(isExpanded ? null : idx)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Explanation String */}
-                      <p className="text-xs text-[var(--rzp-text-secondary)] mt-2">
-                        {item.explanation}
-                      </p>
+                        {/* Explanation String */}
+                        <p className="text-xs text-[var(--rzp-text-secondary)] mt-2">
+                          {item.explanation}
+                        </p>
 
-                      {/* Reason Codes */}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {item.reason_codes.map(code => (
-                          <span key={code} className="text-[11px] font-mono bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                            {code}
-                          </span>
-                        ))}
-                      </div>
+                        {/* Reason Codes */}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {item.reason_codes.map(code => (
+                            <span key={code} className="text-[11px] font-mono bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                              {code}
+                            </span>
+                          ))}
+                        </div>
 
-                      {/* Expanded Details */}
-                      {isExpanded && (
-                        <div className="mt-4 pt-3 border-t border-dashed border-gray-200 text-xs space-y-3">
-                          {item.frictions && item.frictions.length > 0 && (
-                            <div>
-                              <span className="font-semibold text-red-700 block mb-1">Detected Frictions:</span>
-                              <div className="space-y-1">
-                                {item.frictions.map((f, fIdx) => (
-                                  <div key={fIdx} className="p-2 bg-red-50 text-red-800 rounded flex justify-between">
-                                    <span>{f.description || f.reason}</span>
-                                    <span className="font-bold">{f.severity || 'WARN'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {item.rankings && item.rankings.length > 0 && (
-                            <div>
-                              <span className="font-semibold text-gray-700 block mb-1">Candidate Product Rankings:</span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {item.rankings.map(r => {
-                                  const p = productsMap[r.product_id];
-                                  return (
-                                    <div key={r.product_id} className="p-2 bg-gray-50 rounded border flex justify-between items-center">
-                                      <span className="truncate max-w-[200px]">{p ? p.name : r.product_id}</span>
-                                      <span className="font-mono font-bold text-[var(--rzp-primary)]">
-                                        Rank #{r.rank} (Score: {r.score})
-                                      </span>
+                        {/* Expanded Details */}
+                        {isExpanded && (
+                          <div className="mt-4 pt-3 border-t border-dashed border-gray-200 text-xs space-y-3">
+                            {item.frictions && item.frictions.length > 0 && (
+                              <div>
+                                <span className="font-semibold text-red-700 block mb-1">Detected Frictions:</span>
+                                <div className="space-y-1">
+                                  {item.frictions.map((f, fIdx) => (
+                                    <div key={fIdx} className="p-2 bg-red-50 text-red-800 rounded flex justify-between">
+                                      <span>{f.description || f.reason}</span>
+                                      <span className="font-bold">{f.severity || 'WARN'}</span>
                                     </div>
-                                  );
-                                })}
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                            )}
+
+                            {item.rankings && item.rankings.length > 0 && (
+                              <div>
+                                <span className="font-semibold text-gray-700 block mb-1">Candidate Product Rankings:</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {item.rankings.map(r => {
+                                    const p = productsMap[r.product_id];
+                                    return (
+                                      <div key={r.product_id} className="p-2 bg-gray-50 rounded border flex justify-between items-center">
+                                        <span className="truncate max-w-[200px]">{p ? p.name : r.product_id}</span>
+                                        <span className="font-mono font-bold text-[var(--rzp-primary)]">
+                                          Rank #{r.rank} (Score: {r.score})
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Next Step CTA */}
@@ -547,9 +700,9 @@ export const SimulationDashboard: React.FC = () => {
                 Review actionable recommendations and simulate price or delivery changes with the What-If tool.
               </p>
             </div>
-            <Link to="/optimization">
+            <Link to="/optimization?step=action">
               <Button variant="ai" size="sm" className="whitespace-nowrap shadow-sm font-semibold">
-                Review & Optimize <ArrowRight className="h-4 w-4 ml-1.5" />
+                Review & Optimize (Step 4) <ArrowRight className="h-4 w-4 ml-1.5" />
               </Button>
             </Link>
           </div>

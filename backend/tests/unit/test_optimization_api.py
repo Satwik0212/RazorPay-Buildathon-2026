@@ -1,8 +1,9 @@
+from tests.helpers import create_test_merchant
 import uuid
 from app.main import app
 
 
-def test_api_buyer_intent_multiple_inputs(client):
+def test_api_buyer_intent_multiple_inputs(client, db_session):
     # 1. Budget query
     res1 = client.post("/api/v1/buyer/intents", json={"text": "I need a cheap laptop under 50000"})
     assert res1.status_code == 200
@@ -24,7 +25,7 @@ def test_api_buyer_intent_multiple_inputs(client):
     assert data1["intent"]["max_budget"] != data2["intent"]["max_budget"]
 
 
-def test_api_buyer_personas_list_and_create(client):
+def test_api_buyer_personas_list_and_create(client, db_session):
     # List personas
     res = client.get("/api/v1/buyer-personas")
     assert res.status_code == 200
@@ -52,13 +53,10 @@ def test_api_buyer_personas_list_and_create(client):
     assert create_res.json()["name"] == f"Gamer Buyer {custom_id[:6]}"
 
 
-def test_api_what_if_analysis(client):
+def test_api_what_if_analysis(client, db_session):
     # 1. Register merchant to get auth token
     unique_email = f"whatif_{uuid.uuid4().hex[:8]}@test.com"
-    m_reg = client.post(
-        "/api/v1/auth/register",
-        json={"email": unique_email, "password": "password12345", "role": "MERCHANT"},
-    )
+    m_reg = create_test_merchant(db_session, unique_email, "password12345")
     assert m_reg.status_code == 201
     m_token = m_reg.json()["access_token"]
     merchant_id = m_reg.json()["user"]["merchant_id"]

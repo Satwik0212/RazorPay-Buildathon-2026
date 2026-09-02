@@ -50,7 +50,10 @@ def test_inventory_decrement_safety(db_session):
         cart_id=cart.id, subtotal=3000, discount=0, shipping=0, tax=0,
         total=3000, currency="INR", quote_hash="h",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        line_items_snapshot=[]
+        line_items_snapshot=[{
+            "product_id": str(product.id),
+            "quantity": 3
+        }]
     )
     db_session.add(quote)
     db_session.commit()
@@ -111,7 +114,10 @@ def test_inventory_decrement_safety(db_session):
         cart_id=cart2.id, subtotal=8000, discount=0, shipping=0, tax=0,
         total=8000, currency="INR", quote_hash="h2",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        line_items_snapshot=[]
+        line_items_snapshot=[{
+            "product_id": str(product.id),
+            "quantity": 8
+        }]
     )
     db_session.add(quote2)
     db_session.commit()

@@ -1,14 +1,12 @@
+from tests.helpers import create_test_merchant
 import uuid
 import pytest
 
 
-def test_catalogue_search_and_intent_integration(client):
+def test_catalogue_search_and_intent_integration(client, db_session):
     # 1. Register merchant user
     unique_email = f"merchant_cat_{uuid.uuid4().hex[:8]}@example.com"
-    reg_res = client.post(
-        "/api/v1/auth/register",
-        json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"}
-    )
+    reg_res = create_test_merchant(db_session, unique_email, "Password123!")
     assert reg_res.status_code == 201
     token = reg_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -71,13 +69,13 @@ def test_catalogue_search_and_intent_integration(client):
     assert "budget_compliant" in search_results[0]["matched_constraints"]
 
 
-def test_merchant_read_isolation_and_soft_delete(client):
+def test_merchant_read_isolation_and_soft_delete(client, db_session):
     # Register merchant A
-    merchant_a = client.post("/api/v1/auth/register", json={"email": f"a_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    merchant_a = create_test_merchant(db_session, f"a_{uuid.uuid4().hex[:8]}@example.com", "Password123!").json()
     headers_a = {"Authorization": f"Bearer {merchant_a['access_token']}"}
 
     # Register merchant B
-    merchant_b = client.post("/api/v1/auth/register", json={"email": f"b_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    merchant_b = create_test_merchant(db_session, f"b_{uuid.uuid4().hex[:8]}@example.com", "Password123!").json()
     headers_b = {"Authorization": f"Bearer {merchant_b['access_token']}"}
 
     # Merchant A creates a product
@@ -119,8 +117,8 @@ def test_merchant_read_isolation_and_soft_delete(client):
     assert res_a_reactivated["is_active"] is True
 
 
-def test_inventory_update(client):
-    merchant = client.post("/api/v1/auth/register", json={"email": f"inv_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+def test_inventory_update(client, db_session):
+    merchant = create_test_merchant(db_session, f"inv_{uuid.uuid4().hex[:8]}@example.com", "Password123!").json()
     headers = {"Authorization": f"Bearer {merchant['access_token']}"}
 
     prod = client.post("/api/v1/products", json={"name": "Inv Prod", "category": "cat", "price": 100, "currency": "INR", "metadata": {}, "initial_quantity": 10}, headers=headers).json()
@@ -134,7 +132,7 @@ def test_inventory_update(client):
     assert upd["available_quantity"] == 50
 
     # Merchant B cannot update Merchant A's inventory
-    merchant_b = client.post("/api/v1/auth/register", json={"email": f"b_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    merchant_b = create_test_merchant(db_session, f"b_{uuid.uuid4().hex[:8]}@example.com", "Password123!").json()
     headers_b = {"Authorization": f"Bearer {merchant_b['access_token']}"}
     
     fail = client.patch(f"/api/v1/products/{prod['id']}/inventory", json={"available_quantity": 100}, headers=headers_b)

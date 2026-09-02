@@ -20,11 +20,10 @@ export const Register = () => {
     try {
       const response = await apiClient.post('/auth/register', { 
         email, 
-        password,
-        role: 'MERCHANT'
+        password
       });
-      localStorage.setItem('access_token', response.data.access_token);
-      navigate('/dashboard');
+      localStorage.setItem('buyer_token', response.data.access_token);
+      navigate('/buyer');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
@@ -39,9 +38,9 @@ export const Register = () => {
           <div className="mx-auto w-12 h-12 bg-[var(--rzp-primary)] rounded-lg flex items-center justify-center mb-4">
             <span className="text-white font-bold text-2xl leading-none">R</span>
           </div>
-          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <CardTitle className="text-2xl">Create a Customer Account</CardTitle>
           <p className="text-sm text-[var(--rzp-text-muted)] mt-2">
-            Start optimizing with AI Commerce
+            Experience the AI Commerce Buyer Flow
           </p>
         </CardHeader>
         <form onSubmit={handleRegister}>
@@ -54,7 +53,7 @@ export const Register = () => {
             <Input
               label="Email"
               type="email"
-              placeholder="merchant@example.com"
+              placeholder="buyer@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

@@ -1,3 +1,4 @@
+from tests.helpers import create_test_merchant
 import hmac
 import hashlib
 import json
@@ -5,12 +6,9 @@ import pytest
 from app.core.config import settings
 
 
-def test_end_to_end_checkout_and_webhook_flow(client):
+def test_end_to_end_checkout_and_webhook_flow(client, db_session):
     # 1. Register Merchant
-    m_reg = client.post(
-        "/api/v1/auth/register",
-        json={"email": "e2e_merchant@test.com", "password": "password12345", "role": "MERCHANT"},
-    ).json()
+    m_reg = create_test_merchant(db_session, "e2e_merchant@test.com", "password12345").json()
     m_token = m_reg["access_token"]
     merchant_id = m_reg["user"]["merchant_id"]
 

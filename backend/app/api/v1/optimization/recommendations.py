@@ -145,13 +145,13 @@ def update_recommendation_status(
                         flag_modified(product, "product_metadata")
                     
                 if "new_inventory_count" in rec.action_data:
-                    before_state["inventory_count"] = product.inventory_count
+                    before_state["inventory_count"] = product.inventory.available_quantity
                     new_val = rec.action_data["new_inventory_count"]
-                    if product.inventory_count != new_val:
-                        product.inventory_count = new_val
+                    if product.inventory.available_quantity != new_val:
+                        product.inventory.available_quantity = new_val
                         product.is_active = True
                         changed = True
-                    after_state["inventory_count"] = product.inventory_count
+                    after_state["inventory_count"] = product.inventory.available_quantity
 
                 # Only record audit if something was actually changed (Idempotency)
                 if changed:

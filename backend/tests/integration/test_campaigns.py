@@ -1,3 +1,4 @@
+from tests.helpers import create_test_merchant
 import pytest
 import uuid
 from fastapi import status
@@ -14,12 +15,9 @@ from app.main import app
 app.include_router(campaigns_router, prefix="/api/v1/optimization")
 
 @pytest.fixture
-def auth_setup(client):
+def auth_setup(client, db_session):
     unique_email = f"merchant_{uuid.uuid4().hex[:8]}@example.com"
-    reg_res = client.post(
-        "/api/v1/auth/register",
-        json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"}
-    )
+    reg_res = create_test_merchant(db_session, unique_email, "Password123!")
     token = reg_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
@@ -29,7 +27,7 @@ def auth_setup(client):
     return {"client": client, "headers": headers, "merchant_id": merchant_id}
 
 @pytest.fixture
-def test_product(auth_setup):
+def test_product(auth_setup, db_session):
     res = auth_setup["client"].post(
         "/api/v1/products",
         headers=auth_setup["headers"],
@@ -44,7 +42,7 @@ def test_product(auth_setup):
     return res.json()
 
 @pytest.fixture
-def test_persona(auth_setup):
+def test_persona(auth_setup, db_session):
     res = auth_setup["client"].post(
         "/api/v1/optimization/personas",
         headers=auth_setup["headers"],
@@ -73,7 +71,7 @@ def db_persona(db_session):
     db_session.refresh(persona)
     return persona
 
-def test_generate_campaigns_empty(auth_setup):
+def test_generate_campaigns_empty(auth_setup, db_session):
     response = auth_setup["client"].post("/api/v1/optimization/campaigns/generate", headers=auth_setup["headers"])
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json() == []

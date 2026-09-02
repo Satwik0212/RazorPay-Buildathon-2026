@@ -1,11 +1,12 @@
+from tests.helpers import create_test_merchant
 import uuid
 import pytest
 from httpx import AsyncClient
 
-def test_analytics_overview_and_isolation(client):
+def test_analytics_overview_and_isolation(client, db_session):
     # 1. Register Primary Merchant
     email1 = f"merchant1_{uuid.uuid4().hex[:8]}@example.com"
-    reg1 = client.post("/api/v1/auth/register", json={"email": email1, "password": "Password123!", "role": "MERCHANT"})
+    reg1 = create_test_merchant(db_session, email1, "Password123!")
     token1 = reg1.json()["access_token"]
     headers1 = {"Authorization": f"Bearer {token1}"}
 
@@ -18,7 +19,7 @@ def test_analytics_overview_and_isolation(client):
 
     # 3. Register Secondary Merchant
     email2 = f"merchant2_{uuid.uuid4().hex[:8]}@example.com"
-    reg2 = client.post("/api/v1/auth/register", json={"email": email2, "password": "Password123!", "role": "MERCHANT"})
+    reg2 = create_test_merchant(db_session, email2, "Password123!")
     token2 = reg2.json()["access_token"]
     headers2 = {"Authorization": f"Bearer {token2}"}
 

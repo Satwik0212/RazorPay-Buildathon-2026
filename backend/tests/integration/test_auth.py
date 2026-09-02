@@ -2,19 +2,18 @@ import pytest
 
 
 def test_auth_registration_and_login_flow(client):
-    # 1. Register Merchant
+    # 1. Register Customer
     reg_resp = client.post(
         "/api/v1/auth/register",
         json={
-            "email": "merchant_api@test.com",
+            "email": "customer_api@test.com",
             "password": "password12345",
-            "role": "MERCHANT",
         },
     )
     assert reg_resp.status_code == 201
     reg_data = reg_resp.json()
-    assert reg_data["user"]["email"] == "merchant_api@test.com"
-    assert reg_data["user"]["role"] == "MERCHANT"
+    assert reg_data["user"]["email"] == "customer_api@test.com"
+    assert reg_data["user"]["role"] == "CUSTOMER"
     assert "access_token" in reg_data
     token = reg_data["access_token"]
 
@@ -24,13 +23,13 @@ def test_auth_registration_and_login_flow(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert me_resp.status_code == 200
-    assert me_resp.json()["email"] == "merchant_api@test.com"
+    assert me_resp.json()["email"] == "customer_api@test.com"
 
     # 3. Login
     login_resp = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "merchant_api@test.com",
+            "email": "customer_api@test.com",
             "password": "password12345",
         },
     )
@@ -41,9 +40,8 @@ def test_auth_registration_and_login_flow(client):
     dup_resp = client.post(
         "/api/v1/auth/register",
         json={
-            "email": "merchant_api@test.com",
+            "email": "customer_api@test.com",
             "password": "password12345",
-            "role": "MERCHANT",
         },
     )
     assert dup_resp.status_code == 409

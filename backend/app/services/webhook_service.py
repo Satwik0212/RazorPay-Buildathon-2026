@@ -128,11 +128,14 @@ class WebhookService:
             return
 
         # ATOMIC INVENTORY DECREMENT
-        cart = self.cart_repo.get_by_id(order.cart_id)
-        if cart and cart.items:
+        quote = order.authorization.quote if order.authorization else None
+        if quote and quote.line_items_snapshot:
+            import uuid
             item_quantities = {}
-            for item in cart.items:
-                item_quantities[item.product_id] = item_quantities.get(item.product_id, 0) + item.quantity
+            for item in quote.line_items_snapshot:
+                product_id = uuid.UUID(item["product_id"])
+                quantity = item["quantity"]
+                item_quantities[product_id] = item_quantities.get(product_id, 0) + quantity
             
             try:
                 with self.db.begin_nested():

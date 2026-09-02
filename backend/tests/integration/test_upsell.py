@@ -1,3 +1,4 @@
+from tests.helpers import create_test_merchant
 import uuid
 import pytest
 from app.main import app
@@ -8,7 +9,7 @@ app.include_router(upsell_router, prefix="/api/v1")
 def test_upsell_only_shows_merchant_products(client, db_session):
     # Register Merchant A and create products
     unique_email_a = f"merchant_a_{uuid.uuid4().hex[:8]}@example.com"
-    reg_a = client.post("/api/v1/auth/register", json={"email": unique_email_a, "password": "Password123!", "role": "MERCHANT"})
+    reg_a = create_test_merchant(db_session, unique_email_a, "Password123!")
     token_a = reg_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
 
@@ -33,7 +34,7 @@ def test_upsell_only_shows_merchant_products(client, db_session):
 
     # Register Merchant B and create products
     unique_email_b = f"merchant_b_{uuid.uuid4().hex[:8]}@example.com"
-    reg_b = client.post("/api/v1/auth/register", json={"email": unique_email_b, "password": "Password123!", "role": "MERCHANT"})
+    reg_b = create_test_merchant(db_session, unique_email_b, "Password123!")
     token_b = reg_b.json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
@@ -75,7 +76,7 @@ def test_upsell_only_shows_merchant_products(client, db_session):
 def test_upsell_cart_suggestions(client, db_session):
     # Setup Merchant and Customer
     unique_email_a = f"merchant_{uuid.uuid4().hex[:8]}@example.com"
-    reg_a = client.post("/api/v1/auth/register", json={"email": unique_email_a, "password": "Password123!", "role": "MERCHANT"})
+    reg_a = create_test_merchant(db_session, unique_email_a, "Password123!")
     token_a = reg_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
     merch_id = client.get("/api/v1/merchants/me", headers=headers_a).json()["id"]

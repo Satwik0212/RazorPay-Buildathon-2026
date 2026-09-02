@@ -44,10 +44,18 @@ def create_checkout_order(
     )
 
 
+from app.core.exceptions import ForbiddenError
+
 @router.get("/orders/{order_id}", response_model=CheckoutOrderResponse)
-def get_checkout_order(order_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_checkout_order(
+    order_id: uuid.UUID,
+    current_customer: Customer = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
     service = CheckoutService(db)
     order = service.get_order_by_id(order_id)
+    if order.customer_id != current_customer.id:
+        raise ForbiddenError("You cannot access this order.")
     return CheckoutOrderResponse(
         order_id=order.id,
         merchant_id=order.merchant_id,
@@ -66,7 +74,16 @@ def get_checkout_order(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.get("/orders/{order_id}/payments", response_model=List[PaymentResponse])
-def get_order_payments(order_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_order_payments(
+    order_id: uuid.UUID,
+    current_customer: Customer = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
+    checkout_service = CheckoutService(db)
+    order = checkout_service.get_order_by_id(order_id)
+    if order.customer_id != current_customer.id:
+        raise ForbiddenError("You cannot access payments for this order.")
+
     service = PaymentService(db)
     payments = service.get_payments_for_order(order_id)
     return [PaymentResponse.model_validate(p) for p in payments]

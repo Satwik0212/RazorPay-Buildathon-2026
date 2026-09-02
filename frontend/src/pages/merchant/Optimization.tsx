@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { 
-  Sparkles, 
-  Loader2, 
-  TestTube, 
-  ShieldCheck, 
-  AlertTriangle, 
-  TrendingUp, 
-  TrendingDown, 
-  Play, 
+import {
+  Sparkles,
+  Loader2,
+  TestTube,
+  ShieldCheck,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Play,
   RotateCcw,
   Zap,
-  Bot
+  Bot,
+  CheckCircle2,
+  ArrowRight,
+  FileCheck2,
+  Layers
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { productsApi } from '../../api/products';
@@ -28,7 +32,8 @@ import {
   type RecommendationFilterState,
   type PipelineStepId,
   getRecommendationCategory,
-  getRecommendationSeverity
+  getRecommendationSeverity,
+  formatPriceInINR
 } from '../../components/features/recommendations';
 
 export const Optimization: React.FC = () => {
@@ -60,7 +65,7 @@ export const Optimization: React.FC = () => {
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResponse | null>(null);
   const [whatIfError, setWhatIfError] = useState('');
 
-  // Scroll to section when step param is present
+  // Scroll to section when step param changes
   useEffect(() => {
     if (stepParam === 'insight') {
       const el = document.getElementById('merchant-insight');
@@ -87,31 +92,31 @@ export const Optimization: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      setLoadingRecs(true);
-      try {
-        const [merchantId, prodRes] = await Promise.all([
-          authApi.getOrInitMerchantId(),
-          productsApi.getProducts().catch(() => ({ data: { items: [] } })),
-        ]);
+  const loadData = async () => {
+    setLoadingRecs(true);
+    try {
+      const [merchantId, prodRes] = await Promise.all([
+        authApi.getOrInitMerchantId(),
+        productsApi.getProducts().catch(() => ({ data: { items: [] } })),
+      ]);
 
-        const items = prodRes.data.items || [];
-        setProducts(items);
-        if (items.length > 0) {
-          setSelectedProductId(items[0].id);
-        }
-
-        const res = await simulationApi.getRecommendations();
-        setRecommendations(res.data || []);
-      } catch (err) {
-        console.error('Failed to fetch recommendations:', err);
-      } finally {
-        setLoadingRecs(false);
+      const items = prodRes.data.items || [];
+      setProducts(items);
+      if (items.length > 0 && !selectedProductId) {
+        setSelectedProductId(items[0].id);
       }
-    };
 
-    fetchInitialData();
+      const res = await simulationApi.getRecommendations();
+      setRecommendations(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch recommendations:', err);
+    } finally {
+      setLoadingRecs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const handleApplyRecommendationToWhatIf = (rec: Recommendation) => {
@@ -119,14 +124,14 @@ export const Optimization: React.FC = () => {
       setSelectedProductId(rec.product_id);
     }
     setHypothesis(`Testing recommendation: ${rec.title}`);
-    
-    if (rec.action_data?.friction_type === 'DELIVERY_UNCLEAR') {
-       setDeliveryDaysOverride('2');
+
+    if (rec.action_data?.friction_type === 'DELIVERY_UNCLEAR' || rec.type.includes('DELIVERY')) {
+       setDeliveryDaysOverride(String(rec.action_data?.new_delivery_days ?? 2));
     }
-    if (rec.action_data?.friction_type === 'RETURN_UNCLEAR') {
-       setReturnDaysOverride('14');
+    if (rec.action_data?.friction_type === 'RETURN_UNCLEAR' || rec.type.includes('RETURN')) {
+       setReturnDaysOverride(String(rec.action_data?.new_return_days ?? 14));
     }
-    
+
     if (rec.action_data?.new_price) {
       setPriceOverride(String(rec.action_data.new_price / 100));
     } else if (rec.action_data?.friction_type === 'PRICE_MISMATCH') {
@@ -188,16 +193,20 @@ export const Optimization: React.FC = () => {
     try {
       const res = await simulationApi.updateRecommendationStatus(id, status);
       setRecommendations(prev => prev.map(r => r.id === id ? { ...r, status: res.data.status } : r));
+
+      // If a recommendation was applied, refresh products to get the mutated DB state
+      if (status === 'APPLIED') {
+        const prodRes = await productsApi.getProducts().catch(() => null);
+        if (prodRes?.data?.items) {
+          setProducts(prodRes.data.items);
+        }
+      }
     } catch (err) {
       console.error('Failed to update status', err);
     }
   };
 
   const selectedProduct = products.find(p => p.id === selectedProductId);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(price / 100);
-  };
 
   const availableCategories = useMemo(() => {
     const set = new Set<string>();
@@ -215,6 +224,10 @@ export const Optimization: React.FC = () => {
       applied: recommendations.filter(r => r.status === 'APPLIED').length,
       rejected: recommendations.filter(r => r.status === 'REJECTED').length
     };
+  }, [recommendations]);
+
+  const appliedRecommendations = useMemo(() => {
+    return recommendations.filter(r => r.status === 'APPLIED');
   }, [recommendations]);
 
   const filteredRecommendations = useMemo(() => {
@@ -286,12 +299,62 @@ export const Optimization: React.FC = () => {
       {/* Visual Analytical Pipeline Header */}
       <RecommendationPipelineHeader currentStep={currentStep} onStepClick={handleStepClick} />
 
+      {/* CLOSED-LOOP MUTATION VERIFICATION BANNER */}
+      {appliedRecommendations.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 border border-emerald-300 rounded-xl p-4 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <FileCheck2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-emerald-950 flex items-center">
+                  <span>{appliedRecommendations.length} Recommendation {appliedRecommendations.length === 1 ? 'Mutation' : 'Mutations'} Applied to Live Catalogue</span>
+                  <span className="ml-2 text-[10px] font-mono font-bold bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded">
+                    POSTGRES PERSISTED
+                  </span>
+                </h3>
+                <p className="text-xs text-emerald-800 mt-0.5">
+                  Production catalogue attributes have been updated. Audit trail recorded in database.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
+              <Link to="/transactions">
+                <Button variant="outline" size="sm" className="text-xs font-semibold border-emerald-300 text-emerald-900 hover:bg-emerald-100">
+                  Audit Log →
+                </Button>
+              </Link>
+              <Button
+                variant="ai"
+                size="sm"
+                onClick={() => navigate('/simulation?step=simulation')}
+                className="text-xs font-semibold shadow-sm"
+              >
+                <Play className="h-3.5 w-3.5 mr-1" /> Re-run Simulation to Verify
+              </Button>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-emerald-200/60 flex flex-wrap gap-2 text-xs">
+            <span className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wider">Applied Changes:</span>
+            {appliedRecommendations.map(r => (
+              <span key={r.id} className="inline-flex items-center px-2 py-0.5 rounded bg-white border border-emerald-200 text-emerald-900 text-[11px] font-medium shadow-2xs">
+                <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
+                {r.title}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Aggregate Intelligence Summary Banner (MERCHANT INSIGHT) */}
       <div id="merchant-insight" className="scroll-mt-6">
         <RecommendationSummaryBanner
           recommendations={recommendations}
           products={products}
-          onRunSimulation={() => navigate('/simulation')}
+          onRunSimulation={() => navigate('/simulation?step=simulation')}
         />
       </div>
 
@@ -303,7 +366,7 @@ export const Optimization: React.FC = () => {
               <Zap className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" /> Actionable Catalogue Interventions
             </h2>
             <p className="text-xs text-[var(--rzp-text-muted)]">
-              Derived from buyer persona frictions and verified ranking penalties.
+              Explicit BEFORE vs AFTER state changes derived from simulated buyer persona frictions.
             </p>
           </div>
           <span className="text-xs font-semibold text-[var(--rzp-text-muted)]">
@@ -337,7 +400,7 @@ export const Optimization: React.FC = () => {
               <p className="text-xs text-[var(--rzp-text-muted)] max-w-md mt-1 mb-5">
                 Recommendations are generated when synthetic buyer personas encounter price ceiling rejections, unstated return policies, missing delivery timelines, or inventory stockouts.
               </p>
-              <Button variant="ai" size="sm" onClick={() => navigate('/simulation')}>
+              <Button variant="ai" size="sm" onClick={() => navigate('/simulation?step=simulation')}>
                 <Play className="h-4 w-4 mr-1.5" /> Launch Buyer Simulation
               </Button>
             </CardContent>
@@ -378,7 +441,7 @@ export const Optimization: React.FC = () => {
       </div>
 
       {/* SECTION 2: WHAT-IF INTERACTIVE WORKBENCH */}
-      <div id="what-if-section" className="space-y-4 pt-6 border-t border-[var(--rzp-border)]">
+      <div id="what-if-section" className="space-y-4 pt-6 border-t border-[var(--rzp-border)] scroll-mt-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold text-[var(--rzp-text)] flex items-center">
@@ -424,7 +487,7 @@ export const Optimization: React.FC = () => {
                       <option value="">All Products in Catalogue</option>
                       {products.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({formatPrice(p.price)})
+                          {p.name} ({formatPriceInINR(p.price)})
                         </option>
                       ))}
                     </select>
@@ -568,7 +631,7 @@ export const Optimization: React.FC = () => {
                           {whatIfResult.baseline_metrics.average_score !== undefined
                             ? `Avg Score: ${whatIfResult.baseline_metrics.average_score}`
                             : whatIfResult.baseline_metrics.average_order_value !== undefined
-                            ? `Simulated AOV: ${formatPrice(whatIfResult.baseline_metrics.average_order_value)}`
+                            ? `Simulated AOV: ${formatPriceInINR(whatIfResult.baseline_metrics.average_order_value)}`
                             : 'Deterministic Baseline'}
                         </p>
                       </div>
@@ -591,7 +654,7 @@ export const Optimization: React.FC = () => {
                           {whatIfResult.simulated_metrics.average_score !== undefined
                             ? `Avg Score: ${whatIfResult.simulated_metrics.average_score}`
                             : whatIfResult.simulated_metrics.average_order_value !== undefined
-                            ? `Simulated AOV: ${formatPrice(whatIfResult.simulated_metrics.average_order_value)}`
+                            ? `Simulated AOV: ${formatPriceInINR(whatIfResult.simulated_metrics.average_order_value)}`
                             : 'Simulated Change'}
                         </p>
                       </div>

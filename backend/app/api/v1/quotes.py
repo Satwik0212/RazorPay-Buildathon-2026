@@ -35,10 +35,18 @@ def create_quote(
     )
 
 
+from app.core.exceptions import ForbiddenError
+
 @router.get("/{quote_id}", response_model=QuoteResponse)
-def get_quote(quote_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_quote(
+    quote_id: uuid.UUID,
+    current_customer: Customer = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
     service = QuoteService(db)
     quote = service.get_quote_by_id(quote_id)
+    if quote.cart.customer_id != current_customer.id:
+        raise ForbiddenError("You cannot access this quote.")
     return QuoteResponse(
         quote_id=quote.id,
         cart_id=quote.cart_id,
@@ -56,9 +64,15 @@ def get_quote(quote_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/{quote_id}/validate", response_model=QuoteValidationResponse)
-def validate_quote(quote_id: uuid.UUID, db: Session = Depends(get_db)):
+def validate_quote(
+    quote_id: uuid.UUID,
+    current_customer: Customer = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
     service = QuoteService(db)
     valid, expired, quote = service.validate_quote(quote_id)
+    if quote.cart.customer_id != current_customer.id:
+        raise ForbiddenError("You cannot validate this quote.")
     return QuoteValidationResponse(
         valid=valid,
         expired=expired,

@@ -1,4 +1,4 @@
-﻿# ==============================
+# ==============================
 # General / OS
 # ==============================
 .DS_Store
@@ -103,3 +103,7 @@ credentials/
 
 # Temporary checkout artifact
 checkout.html
+
+# Agent coordination artifacts
+.agents/
+backend/scratch/

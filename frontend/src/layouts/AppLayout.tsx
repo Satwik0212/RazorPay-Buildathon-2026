@@ -34,11 +34,7 @@ export const AppLayout = () => {
         // Validate if the current token belongs to the demo merchant.
         // If it's a stale test user from a previous session, re-initialize the demo.
         try {
-          const me = await authApi.getMe();
-          if (me.data.email !== 'merchant@demo.com') {
-             localStorage.removeItem('access_token');
-             await authApi.getOrInitMerchantId();
-          }
+          await authApi.getMe();
         } catch {
           localStorage.removeItem('access_token');
           await authApi.getOrInitMerchantId();

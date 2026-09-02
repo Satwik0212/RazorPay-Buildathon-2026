@@ -30,34 +30,14 @@ class AuthService:
         user = User(
             email=req.email,
             password_hash=hash_password(req.password),
-            role=req.role.value,
+            role=UserRole.CUSTOMER.value,
             is_active=True,
         )
         created_user = self.merchant_repo.create_user(user)
 
         # Initialize corresponding role profile
-        if req.role == UserRole.MERCHANT:
-            merchant = Merchant(
-                user_id=created_user.id,
-                name=req.email.split("@")[0].capitalize() + " Store",
-                description="Merchant store",
-                is_active=True,
-            )
-            created_merchant = self.merchant_repo.create_merchant(merchant)
-            # Default merchant policy
-            self.policy_repo.create_or_update(
-                {
-                    "max_autonomous_amount": 500000,
-                    "daily_autonomous_limit": 5000000,
-                    "require_approval_above": 500000,
-                    "blocked_categories": [],
-                    "is_ai_enabled": True,
-                },
-                merchant_id=created_merchant.id,
-            )
-        elif req.role == UserRole.CUSTOMER:
-            customer = Customer(user_id=created_user.id)
-            self.customer_repo.create(customer)
+        customer = Customer(user_id=created_user.id)
+        self.customer_repo.create(customer)
 
         token = create_access_token(user_id=created_user.id, role=created_user.role)
 

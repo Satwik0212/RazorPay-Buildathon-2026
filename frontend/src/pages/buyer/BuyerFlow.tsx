@@ -73,10 +73,7 @@ export const BuyerFlow = () => {
       if (authMode === 'login') {
         res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/login`, authData);
       } else {
-        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/register`, {
-          ...authData,
-          role: 'CUSTOMER'
-        });
+        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/register`, authData);
       }
       localStorage.setItem('buyer_token', res.data.access_token);
       setStep('catalog');

@@ -1,13 +1,11 @@
+from tests.helpers import create_test_merchant
 import uuid
 import pytest
 
-def test_catalogue_mutation_changes_simulation_outcomes(client):
+def test_catalogue_mutation_changes_simulation_outcomes(client, db_session):
     # 1. Register merchant user
     unique_email = f"merchant_sim_{uuid.uuid4().hex[:8]}@example.com"
-    reg_res = client.post(
-        "/api/v1/auth/register",
-        json={"email": unique_email, "password": "Password123!", "role": "MERCHANT"}
-    )
+    reg_res = create_test_merchant(db_session, unique_email, "Password123!")
     assert reg_res.status_code == 201
     token = reg_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

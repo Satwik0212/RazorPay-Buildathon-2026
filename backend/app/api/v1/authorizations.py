@@ -31,10 +31,18 @@ def create_authorization(
     )
 
 
+from app.core.exceptions import ForbiddenError
+
 @router.get("/{authorization_id}", response_model=AuthorizationResponse)
-def get_authorization(authorization_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_authorization(
+    authorization_id: uuid.UUID,
+    current_customer: Customer = Depends(get_current_customer),
+    db: Session = Depends(get_db)
+):
     service = AuthorizationService(db)
     auth = service.get_authorization_by_id(authorization_id)
+    if auth.customer_id != current_customer.id:
+        raise ForbiddenError("You cannot access this authorization.")
     return AuthorizationResponse(
         authorization_id=auth.id,
         quote_id=auth.quote_id,
