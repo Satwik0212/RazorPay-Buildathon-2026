@@ -7,6 +7,7 @@ from app.core.database import Base, engine
 from app.core.error_handlers import register_error_handlers
 from app.api.router import main_api_router
 import app.models  # Ensure all SQLAlchemy models are registered with Base metadata
+from app.core.seed import seed_buyer_personas
 
 
 @asynccontextmanager
@@ -16,6 +17,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME} in {settings.ENVIRONMENT} mode...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database schema initialized successfully.")
+    seed_buyer_personas()
     yield
     # Shutdown
     logger.info("Shutting down application...")

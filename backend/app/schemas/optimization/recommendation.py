@@ -4,6 +4,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class RecommendationStatusUpdate(BaseModel):
+    status: str
+
 class RecommendationResponse(BaseModel):
     id: uuid.UUID
     merchant_id: uuid.UUID

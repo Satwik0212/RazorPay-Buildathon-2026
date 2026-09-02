@@ -69,5 +69,6 @@ def test_simulation_engine_all_rejected_when_hard_constraints_fail():
     assert res["constraints_satisfied"] is False
     assert res["selected_product_id"] is None
     assert "NO_MATCHING_PRODUCTS" in res["reason_codes"]
+    assert "Dominant reason: PRICE_MISMATCH" in res["explanation"]
     assert len(res["frictions"]) >= 2
     assert all(f["reason"] == "PRICE_MISMATCH" for f in res["frictions"])

@@ -97,11 +97,11 @@ export interface CheckoutOrder {
   cart_id: string;
   authorization_id: string;
   razorpay_order_id: string;
+  razorpay_key_id?: string;
   amount: number;
   currency: Currency;
   status: string;
   receipt: string;
-  razorpay_key_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -140,8 +140,11 @@ export interface SimulationFriction {
 
 export interface SimulationRanking {
   product_id: string;
+  product_name?: string;
   score: number;
   rank: number;
+  frictions?: string[];
+  passed?: boolean;
 }
 
 export interface SimulationResultItem {
@@ -153,6 +156,15 @@ export interface SimulationResultItem {
   frictions: SimulationFriction[];
   rankings: SimulationRanking[];
   explanation: string;
+  intent?: {
+    max_budget?: number;
+    requirements?: string[];
+    delivery_deadline_days?: number;
+    category?: string;
+    preferences?: string[];
+    [key: string]: any;
+  };
+  persona_weights?: Record<string, number>;
 }
 
 export interface SimulationSummaryMetrics {
@@ -235,3 +247,82 @@ export interface MerchantOverviewAnalytics {
   total_personas: number;
   total_recommendations: number;
 }
+
+
+export interface PersonaPerformance {
+  persona_name: string;
+  total_simulations: number;
+  matches: number;
+  rejections: number;
+  average_score: number;
+  top_frictions: string[];
+}
+
+export interface FrictionBreakdown {
+  friction_type: string;
+  count: number;
+}
+
+export interface ProductIntelligence {
+  product_id: string;
+  product_name: string;
+  problem: string;
+  evidence: string;
+  recommended_action: string;
+  recommendation_id: string;
+}
+
+export interface RecommendationLifecycle {
+  proposed: number;
+  applied: number;
+  rejected: number;
+}
+
+export interface MerchantIntelligenceAnalytics {
+  overview: MerchantOverviewAnalytics;
+  persona_performance: PersonaPerformance[];
+  friction_breakdown: FrictionBreakdown[];
+  product_intelligence: ProductIntelligence[];
+  recommendation_lifecycle: RecommendationLifecycle;
+}
+
+export interface UpsellSuggestion {
+  product_id: string;
+  name: string;
+  price: number;
+  category: string;
+  score: number;
+  explanation?: string;
+}
+
+export interface UpsellResponse {
+  upsell: UpsellSuggestion[];
+  cross_sell: UpsellSuggestion[];
+  anchor_product_ids: string[];
+  data_source: string;
+}
+
+export type CampaignStatus = "PROPOSED" | "ACTIVE" | "PAUSED" | "ENDED";
+
+export interface Campaign {
+  id: string;
+  merchant_id: string;
+  name: string;
+  objective: string;
+  campaign_type: string;
+  target_persona_id?: string;
+  target_product_id?: string;
+  trigger_signal: string;
+  trigger_evidence: Record<string, any>;
+  message_content: string;
+  status: CampaignStatus;
+  activated_at?: string;
+  ended_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignStatusUpdate {
+  status: CampaignStatus;
+}
+

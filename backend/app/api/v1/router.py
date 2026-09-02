@@ -13,9 +13,12 @@ from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.buyer.intents import router as buyer_intents_router
 from app.api.v1.buyer.personas import router as buyer_personas_router
+from app.api.v1.buyer.campaigns import router as buyer_campaigns_router
+from app.api.v1.buyer.upsell import router as upsell_router
 from app.api.v1.optimization.simulations import router as simulations_router
 from app.api.v1.optimization.recommendations import router as recommendations_router
 from app.api.v1.optimization.what_if import router as what_if_router
+from app.api.v1.optimization.campaigns import router as campaigns_router
 from app.api.v1.analytics import router as analytics_router
 
 api_v1_router = APIRouter()
@@ -35,11 +38,14 @@ api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(audit_router)
 api_v1_router.include_router(analytics_router)
 
-# Shared AI / Buyer / Simulation Boundaries (Sanji integration)
+# Shared AI / Buyer / Simulation Boundaries
 api_v1_router.include_router(buyer_intents_router)
 api_v1_router.include_router(buyer_personas_router)
+api_v1_router.include_router(buyer_campaigns_router)
+api_v1_router.include_router(upsell_router)
 api_v1_router.include_router(simulations_router)
 api_v1_router.include_router(recommendations_router)
 api_v1_router.include_router(what_if_router)
+api_v1_router.include_router(campaigns_router)
 
 __all__ = ["api_v1_router"]

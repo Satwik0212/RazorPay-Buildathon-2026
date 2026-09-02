@@ -107,9 +107,12 @@ def test_recommendation_generation():
     recs = recommendation_service.generate_recommendations(mock_db, merchant_id, events)
     assert len(recs) == 2
 
-    assert recs[0].type == "DELIVERY_CLARITY"
-    assert recs[0].action_data["friction_count"] == 40
-    assert recs[0].product_id == p1
+    types = {r.type: r for r in recs}
+    
+    assert "DELIVERY_CLARITY" in types
+    assert types["DELIVERY_CLARITY"].action_data["friction_count"] == 40
+    assert types["DELIVERY_CLARITY"].product_id == p1
 
-    assert recs[1].type == "PRICE_COMPETITIVENESS"
-    assert recs[1].product_id == p2
+    assert "PRICE_COMPETITIVENESS" in types
+    assert types["PRICE_COMPETITIVENESS"].product_id == p2
+

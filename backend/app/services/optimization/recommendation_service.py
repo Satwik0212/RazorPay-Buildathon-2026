@@ -4,13 +4,13 @@ from app.models.optimization_recommendation import OptimizationRecommendation
 from app.simulation.friction import FrictionReason
 from app.core.constants import RecommendationStatus
 
-
 from sqlalchemy.orm import Session
 
 class RecommendationService:
     """
     Transforms observed simulation friction and drop-offs into actionable,
     structured merchant optimization recommendations.
+    Aggregates friction events by issue type to produce a small, prioritized set of recommendations.
     """
 
     def generate_recommendations(
@@ -18,120 +18,212 @@ class RecommendationService:
         db: Session,
         merchant_id: uuid.UUID,
         friction_events: List[Dict[str, Any]],
-        simulation_run_id: Optional[uuid.UUID] = None
+        simulation_run_id: Optional[uuid.UUID] = None,
+        scenario_count: int = 0
     ) -> List[OptimizationRecommendation]:
         """
         Maps observed friction occurrences to evidence-backed optimization recommendations.
+        Aggregates by friction reason across the merchant's catalogue.
         Persists them to the database.
         """
         recommendations: List[OptimizationRecommendation] = []
         
-        # Group friction by (product_id, reason)
-        friction_counts: Dict[tuple, int] = {}
+        # Group friction by reason
+        reason_groups: Dict[str, List[Dict[str, Any]]] = {}
         for event in friction_events:
-            p_id = event.get("product_id")
             reason = event.get("reason")
-            count = event.get("count", 1)
-            key = (p_id, reason)
-            friction_counts[key] = friction_counts.get(key, 0) + count
+            if not reason:
+                continue
+            if reason not in reason_groups:
+                reason_groups[reason] = []
+            reason_groups[reason].append(event)
 
-        for (p_id_str, reason), count in friction_counts.items():
-            p_uuid = None
-            if p_id_str:
+        total_overall_frictions = sum(e.get("count", 1) for e in friction_events)
+
+        # Process each reason group
+        for reason, events in reason_groups.items():
+            total_frictions = sum(e.get("count", 1) for e in events)
+            
+            # Count affected products and find the most affected one
+            product_counts: Dict[str, int] = {}
+            for e in events:
+                p_id = e.get("product_id")
+                if p_id:
+                    product_counts[p_id] = product_counts.get(p_id, 0) + e.get("count", 1)
+            
+            unique_product_count = len(product_counts)
+            
+            # Use the most affected product as the primary example for What-If simulations
+            top_product_id_str = None
+            if product_counts:
+                top_product_id_str = max(product_counts.items(), key=lambda x: x[1])[0]
+
+            top_product_uuid = None
+            if top_product_id_str:
                 try:
-                    p_uuid = uuid.UUID(p_id_str) if isinstance(p_id_str, str) else p_id_str
+                    top_product_uuid = uuid.UUID(top_product_id_str) if isinstance(top_product_id_str, str) else top_product_id_str
                 except Exception:
-                    p_uuid = None
+                    top_product_uuid = None
+
+            affected_product_ids = list(product_counts.keys())
 
             rec_type = None
             title = None
             rec_reason = None
             action_data = None
-            impact = 0.0
-            confidence = 0.0
+            
+            # Deterministic, empirical impact scoring rather than fabricated percentages
+            impact = round(total_frictions / max(total_overall_frictions, 1), 3)
+            # Confidence grows logarithmically with evidence volume up to 1.0
+            confidence = round(min(total_frictions / 20.0, 1.0), 3)
 
+            # Map reason to recommendation details
             if reason == FrictionReason.DELIVERY_UNCLEAR.value or reason == "DELIVERY_UNCLEAR":
                 rec_type = "DELIVERY_CLARITY"
                 title = "Add Explicit Delivery Timeline"
-                rec_reason = f"{count} simulated speed-focused buyers abandoned due to missing or delayed delivery promises."
+                rec_reason = f"{total_frictions} simulated speed-focused buyer drop-offs occurred due to missing or delayed delivery promises across {unique_product_count} products."
                 action_data = {
                     "suggested_change": "Configure 'delivery_days: 2' or express shipping in product metadata.",
-                    "friction_count": count,
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
                     "friction_type": "DELIVERY_UNCLEAR",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
+                    "new_delivery_days": 2,
+                    "before_state_description": "Unknown or >2 days",
+                    "after_state_description": "2 days"
                 }
-                impact = 0.22
-                confidence = 0.90
+
+            elif reason == "DELIVERY_UNKNOWN" or (hasattr(FrictionReason, "DELIVERY_UNKNOWN") and reason == FrictionReason.DELIVERY_UNKNOWN.value):
+                rec_type = "DELIVERY_UNKNOWN"
+                title = "Add Structured Delivery Days"
+                rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because delivery requirements could not be verified across {unique_product_count} products."
+                action_data = {
+                    "suggested_change": "Add structured 'delivery_days: 2' information to metadata.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
+                    "friction_type": "DELIVERY_UNKNOWN",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
+                    "new_delivery_days": 2,
+                    "before_state_description": "Unknown",
+                    "after_state_description": "2 days"
+                }
+
+            elif reason == "DELIVERY_TOO_SLOW" or (hasattr(FrictionReason, "DELIVERY_TOO_SLOW") and reason == FrictionReason.DELIVERY_TOO_SLOW.value):
+                rec_type = "DELIVERY_TOO_SLOW"
+                title = "Reduce Delivery Time"
+                rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because delivery time exceeded strict deadlines across {unique_product_count} products."
+                action_data = {
+                    "suggested_change": "Reduce delivery time to 2 days.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
+                    "friction_type": "DELIVERY_TOO_SLOW",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
+                    "new_delivery_days": 2,
+                    "before_state_description": ">2 days",
+                    "after_state_description": "2 days"
+                }
 
             elif reason == FrictionReason.PRICE_MISMATCH.value or reason == "PRICE_MISMATCH":
                 rec_type = "PRICE_COMPETITIVENESS"
                 title = "Adjust Price or Add Promotional Discount"
-                rec_reason = f"{count} simulated budget-conscious buyers rejected this item because price exceeded budget constraint."
+                rec_reason = f"{total_frictions} simulated budget-conscious buyer drop-offs occurred because prices exceeded budget constraints across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Introduce a 5-10% promotional discount offer to capture budget buyer segment.",
-                    "friction_count": count,
+                    "suggested_change": "Review price positioning for budget-conscious buyer segments.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
                     "friction_type": "PRICE_MISMATCH",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
                 }
-                impact = 0.28
-                confidence = 0.85
 
             elif reason == FrictionReason.RETURN_UNCLEAR.value or reason == "RETURN_UNCLEAR":
                 rec_type = "RETURN_POLICY_CLARITY"
                 title = "Clarify Return & Refund Policy"
-                rec_reason = f"{count} quality-focused buyers hesitated due to unstated return terms."
+                rec_reason = f"{total_frictions} simulated buyer drop-offs occurred due to unstated return terms across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Add explicit 'return_days: 14' or 'return_policy: full refund' in product metadata.",
-                    "friction_count": count,
+                    "suggested_change": "Add a structured return policy.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
                     "friction_type": "RETURN_UNCLEAR",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
                 }
-                impact = 0.15
-                confidence = 0.88
 
             elif reason == FrictionReason.INSUFFICIENT_PRODUCT_INFORMATION.value or reason == "INSUFFICIENT_PRODUCT_INFORMATION":
                 rec_type = "CATALOGUE_ENRICHMENT"
                 title = "Enrich Product Specifications & Description"
-                rec_reason = f"{count} feature-focused buyers skipped this product due to sparse specifications or brief description."
+                rec_reason = f"{total_frictions} simulated buyer drop-offs occurred due to sparse specifications or descriptions across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Expand product description and add structured technical attributes to metadata.",
-                    "friction_count": count,
+                    "suggested_change": "Expand product descriptions and add structured technical attributes to metadata.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
                     "friction_type": "INSUFFICIENT_PRODUCT_INFORMATION",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
                 }
-                impact = 0.18
-                confidence = 0.92
 
             elif reason == FrictionReason.INVENTORY_ISSUE.value or reason == "INVENTORY_ISSUE":
                 rec_type = "INVENTORY_RESTORATION"
-                title = "Restock or Reactivate Inactive Listing"
-                rec_reason = f"{count} potential purchases were blocked due to out-of-stock inventory or deactivated listing."
+                title = "Restock or Reactivate Inactive Listings"
+                rec_reason = f"{total_frictions} simulated purchase blocks occurred due to out-of-stock inventory or deactivated listings across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Increase available inventory quantity and ensure active status is enabled.",
-                    "friction_count": count,
+                    "suggested_change": "Increase available inventory for products repeatedly rejected due to stock.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
                     "friction_type": "INVENTORY_ISSUE",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
                 }
-                impact = 0.50
-                confidence = 0.99
+
+            elif reason == FrictionReason.MISSING_FEATURE.value or reason == "MISSING_FEATURE":
+                rec_type = "MISSING_FEATURE"
+                title = "Add Missing Feature Specifications"
+                rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because a required feature was missing or explicitly excluded across {unique_product_count} products."
+                action_data = {
+                    "suggested_change": "Add structured product specifications for required features so AI buyers can verify the requirement.",
+                    "friction_count": total_frictions,
+                    "affected_products_count": unique_product_count,
+                    "friction_type": "MISSING_FEATURE",
+                    "affected_product_ids": affected_product_ids,
+                    "total_overall_frictions": total_overall_frictions,
+                    "scenario_count": scenario_count,
+                }
 
             if rec_type:
-                # Check for existing PROPOSED recommendation of this type for this product
+                # Check for existing PROPOSED recommendation of this type
+                # We aggregate by `type` at the merchant level rather than per-product
                 existing_rec = db.query(OptimizationRecommendation).filter(
                     OptimizationRecommendation.merchant_id == merchant_id,
-                    OptimizationRecommendation.product_id == p_uuid,
                     OptimizationRecommendation.type == rec_type,
                     OptimizationRecommendation.status == RecommendationStatus.PROPOSED.value
                 ).first()
 
                 if existing_rec:
-                    # Update existing recommendation with new evidence
+                    # Update existing recommendation with aggregated evidence
                     existing_rec.reason = rec_reason
                     existing_rec.action_data = action_data
                     existing_rec.simulation_run_id = simulation_run_id
                     existing_rec.confidence = confidence
                     existing_rec.expected_simulated_impact = impact
+                    # Update top_product_id if we have one, otherwise leave it (or update it)
+                    if top_product_uuid:
+                        existing_rec.product_id = top_product_uuid
                     recommendations.append(existing_rec)
                 else:
                     new_rec = OptimizationRecommendation(
                         merchant_id=merchant_id,
                         simulation_run_id=simulation_run_id,
-                        product_id=p_uuid,
+                        product_id=top_product_uuid,
                         type=rec_type,
                         title=title,
                         reason=rec_reason,
@@ -144,6 +236,9 @@ class RecommendationService:
                     recommendations.append(new_rec)
 
         db.commit()
+        
+        # Sort recommendations by impact and friction count (highest first)
+        recommendations.sort(key=lambda r: (r.expected_simulated_impact, r.action_data.get("friction_count", 0)), reverse=True)
         return recommendations
 
 

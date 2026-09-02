@@ -14,6 +14,7 @@ from app.schemas.product.responses import (
     ProductBulkResponse,
     InventoryResponse,
 )
+from app.core.exceptions import ForbiddenError
 from app.schemas.common import PaginatedResponse
 from app.services.product_service import ProductService
 from app.security.authentication import get_current_merchant
@@ -44,7 +45,6 @@ def bulk_create_products(
 
 @router.get("", response_model=PaginatedResponse[ProductResponse])
 def list_products(
-    merchant_id: Optional[uuid.UUID] = None,
     category: Optional[str] = None,
     min_price: Optional[int] = None,
     max_price: Optional[int] = None,
@@ -52,11 +52,12 @@ def list_products(
     search: Optional[str] = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    current_merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):
     service = ProductService(db)
     items, total = service.list_products(
-        merchant_id=merchant_id,
+        merchant_id=current_merchant.id,
         category=category,
         min_price=min_price,
         max_price=max_price,
@@ -73,10 +74,26 @@ def list_products(
     )
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
-def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)):
+@router.get("/categories", response_model=List[str])
+def list_categories(
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db)
+):
     service = ProductService(db)
-    return service.get_product_by_id(product_id)
+    return service.list_categories(current_merchant.id)
+
+
+@router.get("/{product_id}", response_model=ProductResponse)
+def get_product(
+    product_id: uuid.UUID, 
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db)
+):
+    service = ProductService(db)
+    product = service.get_product_by_id(product_id)
+    if product.merchant_id != current_merchant.id:
+        raise ForbiddenError("You cannot access products of another merchant.")
+    return product
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
@@ -100,10 +117,26 @@ def delete_product(
     return service.delete_product(product_id, current_merchant.id)
 
 
+@router.patch("/{product_id}/reactivate", response_model=ProductResponse)
+def reactivate_product(
+    product_id: uuid.UUID,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    service = ProductService(db)
+    return service.reactivate_product(product_id, current_merchant.id)
+
+
 @router.get("/{product_id}/inventory", response_model=InventoryResponse)
-def get_product_inventory(product_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_product_inventory(
+    product_id: uuid.UUID,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db)
+):
     service = ProductService(db)
     product = service.get_product_by_id(product_id)
+    if product.merchant_id != current_merchant.id:
+        raise ForbiddenError("You cannot access inventory of another merchant.")
     return product.inventory
 
 

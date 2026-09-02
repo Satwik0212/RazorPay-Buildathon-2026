@@ -61,6 +61,37 @@ Extract the user's intent. Do NOT add markdown formatting. Output raw JSON only.
             return None
 
 
+
+    def generate_text(self, prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
+        if not self.api_key:
+            return None
+        try:
+            import httpx
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1024
+            }
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(self.base_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+            result_json = response.json()
+            return result_json["choices"][0]["message"]["content"]
+        except Exception:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Groq text API call failed")
+            return None
+
 class SarvamProvider:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -113,6 +144,37 @@ Respond with JSON only. No explanations."""
             logger.warning("Sarvam API call failed")
             return None
 
+
+
+    def generate_text(self, prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
+        if not self.api_key:
+            return None
+        try:
+            import httpx
+            headers = {
+                "api-subscription-key": self.api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1024
+            }
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(self.base_url, json=payload, headers=headers)
+                response.raise_for_status()
+
+            result_json = response.json()
+            return result_json["choices"][0]["message"]["content"]
+        except Exception:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Sarvam text API call failed")
+            return None
 
 class OfflineProvider:
     def generate_structured(self, prompt: str, schema: Type[T]) -> T:
@@ -235,6 +297,10 @@ class OfflineProvider:
         return schema(**data)
 
 
+
+    def generate_text(self, prompt: str, system_prompt: str = "") -> str:
+        return "Check out our latest offerings and upgrade your experience today."
+
 class LLMClient:
     """
     LLM Client adapter with Groq (Primary), Sarvam (Fallback), and Offline (Emergency) routing.
@@ -269,5 +335,25 @@ class LLMClient:
         logger.info("provider=offline")
         return self.offline.generate_structured(prompt, schema)
 
+
+
+    def generate_text(self, prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
+        if settings.GROQ_API_KEY:
+            try:
+                result = self.groq.generate_text(prompt, system_prompt)
+                if result is not None:
+                    return result
+            except Exception:
+                pass
+
+        if settings.SARVAM_API_KEY:
+            try:
+                result = self.sarvam.generate_text(prompt, system_prompt)
+                if result is not None:
+                    return result
+            except Exception:
+                pass
+
+        return self.offline.generate_text(prompt, system_prompt)
 
 llm_client = LLMClient()

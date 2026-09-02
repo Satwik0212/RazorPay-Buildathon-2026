@@ -39,3 +39,5 @@ __all__ = [
     "OptimizationRecommendation",
     "WhatIfRun",
 ]
+
+from app.models.campaign import Campaign

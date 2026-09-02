@@ -21,6 +21,8 @@ class SimulationResultItem(BaseModel):
     frictions: List[Dict[str, Any]] = []
     rankings: List[Dict[str, Any]] = []
     explanation: str = ""
+    intent: Optional[Dict[str, Any]] = None
+    persona_weights: Optional[Dict[str, float]] = None
 
     model_config = ConfigDict(from_attributes=True)
 

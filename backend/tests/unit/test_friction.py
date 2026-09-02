@@ -52,8 +52,8 @@ def test_hard_constraint_delivery_deadline():
     slow_product = {"price": 50000, "is_active": True, "metadata": {"delivery_days": 5}}
     fast_product = {"price": 50000, "is_active": True, "metadata": {"delivery_days": 1}}
 
-    assert FrictionReason.DELIVERY_UNCLEAR in FrictionDetector.detect_hard_constraints(slow_product, intent)
-    assert FrictionReason.DELIVERY_UNCLEAR not in FrictionDetector.detect_hard_constraints(fast_product, intent)
+    assert FrictionReason.DELIVERY_TOO_SLOW in FrictionDetector.detect_hard_constraints(slow_product, intent)
+    assert FrictionReason.DELIVERY_TOO_SLOW not in FrictionDetector.detect_hard_constraints(fast_product, intent)
 
 
 def test_soft_friction_speed_persona_missing_delivery():

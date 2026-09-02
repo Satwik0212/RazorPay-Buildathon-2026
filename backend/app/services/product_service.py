@@ -115,6 +115,28 @@ class ProductService:
         )
         return updated
 
+    def reactivate_product(self, product_id: uuid.UUID, merchant_id: uuid.UUID) -> Product:
+        """
+        Reactivates a previously soft-deleted product.
+        """
+        product = self.get_product_by_id(product_id)
+        if product.merchant_id != merchant_id:
+            raise ForbiddenError("You cannot reactivate products of another merchant.")
+        
+        product.is_active = True
+        updated = self.repo.update_product(product)
+
+        # Audit event doesn't have an exact enum for REACTIVATED yet, let's use UPDATED with explicit data
+        self.audit_service.log_event(
+            event_type=AuditEventType.PRODUCT_UPDATED.value,
+            actor_type=ActorType.MERCHANT.value,
+            entity_type="product",
+            merchant_id=merchant_id,
+            entity_id=updated.id,
+            event_data={"is_active": updated.is_active, "action": "reactivated"},
+        )
+        return updated
+
     def list_products(
         self,
         merchant_id: Optional[uuid.UUID] = None,
@@ -136,6 +158,9 @@ class ProductService:
             limit=limit,
             offset=offset,
         )
+
+    def list_categories(self, merchant_id: uuid.UUID) -> List[str]:
+        return self.repo.list_categories(merchant_id)
 
     def update_inventory(self, product_id: uuid.UUID, merchant_id: uuid.UUID, quantity: int) -> Inventory:
         product = self.get_product_by_id(product_id)

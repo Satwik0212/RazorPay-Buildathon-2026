@@ -1,32 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { 
   Sparkles, 
-  ArrowRight, 
   Loader2, 
   TestTube, 
   ShieldCheck, 
   AlertTriangle, 
-  CheckCircle2, 
   TrendingUp, 
   TrendingDown, 
-  Layers, 
-  Play,
+  Play, 
   RotateCcw,
-  Zap
+  Zap,
+  Bot
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { productsApi } from '../../api/products';
 import { authApi } from '../../api/auth';
 import type { Recommendation, Product, WhatIfResponse } from '../../types';
+import {
+  RecommendationPipelineHeader,
+  RecommendationSummaryBanner,
+  RecommendationCard,
+  RecommendationFilters,
+  type RecommendationFilterState,
+  type PipelineStepId,
+  getRecommendationCategory,
+  getRecommendationSeverity
+} from '../../components/features/recommendations';
 
-export const Optimization = () => {
+export const Optimization: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = searchParams.get('step') as PipelineStepId | null;
+  const currentStep: PipelineStepId = stepParam === 'insight' ? 'insight' : 'action';
+
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(true);
-  const [error, setError] = useState('');
+
+  // Filter & Sort State
+  const [filters, setFilters] = useState<RecommendationFilterState>({
+    search: '',
+    status: 'ALL',
+    category: 'ALL',
+    severity: 'ALL',
+    sortBy: 'impact_desc'
+  });
 
   // What-If Experiment State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
@@ -37,6 +59,33 @@ export const Optimization = () => {
   const [whatIfLoading, setWhatIfLoading] = useState(false);
   const [whatIfResult, setWhatIfResult] = useState<WhatIfResponse | null>(null);
   const [whatIfError, setWhatIfError] = useState('');
+
+  // Scroll to section when step param is present
+  useEffect(() => {
+    if (stepParam === 'insight') {
+      const el = document.getElementById('merchant-insight');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (stepParam === 'action') {
+      const el = document.getElementById('recommended-actions');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [stepParam]);
+
+  const handleStepClick = (step: PipelineStepId) => {
+    if (step === 'simulation') {
+      navigate('/simulation?step=simulation');
+    } else if (step === 'friction') {
+      navigate('/simulation?step=friction');
+    } else if (step === 'insight') {
+      setSearchParams({ step: 'insight' });
+      const el = document.getElementById('merchant-insight');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (step === 'action') {
+      setSearchParams({ step: 'action' });
+      const el = document.getElementById('recommended-actions');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -71,9 +120,22 @@ export const Optimization = () => {
     }
     setHypothesis(`Testing recommendation: ${rec.title}`);
     
+    if (rec.action_data?.friction_type === 'DELIVERY_UNCLEAR') {
+       setDeliveryDaysOverride('2');
+    }
+    if (rec.action_data?.friction_type === 'RETURN_UNCLEAR') {
+       setReturnDaysOverride('14');
+    }
+    
     if (rec.action_data?.new_price) {
       setPriceOverride(String(rec.action_data.new_price / 100));
+    } else if (rec.action_data?.friction_type === 'PRICE_MISMATCH') {
+      const prod = products.find(p => p.id === rec.product_id);
+      if (prod) {
+        setPriceOverride(String(Math.round((prod.price * 0.9) / 100)));
+      }
     }
+
     if (rec.action_data?.delivery_days) {
       setDeliveryDaysOverride(String(rec.action_data.delivery_days));
     }
@@ -81,7 +143,6 @@ export const Optimization = () => {
       setReturnDaysOverride(String(rec.action_data.return_days));
     }
 
-    // Smooth scroll down to what-if section
     const element = document.getElementById('what-if-section');
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -123,117 +184,193 @@ export const Optimization = () => {
     }
   };
 
+  const handleStatusChange = async (id: string, status: string) => {
+    try {
+      const res = await simulationApi.updateRecommendationStatus(id, status);
+      setRecommendations(prev => prev.map(r => r.id === id ? { ...r, status: res.data.status } : r));
+    } catch (err) {
+      console.error('Failed to update status', err);
+    }
+  };
+
   const selectedProduct = products.find(p => p.id === selectedProductId);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(price / 100);
   };
 
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    recommendations.forEach(r => {
+      const { category } = getRecommendationCategory(r);
+      set.add(category);
+    });
+    return Array.from(set);
+  }, [recommendations]);
+
+  const statusCounts = useMemo(() => {
+    return {
+      all: recommendations.length,
+      proposed: recommendations.filter(r => r.status === 'PROPOSED').length,
+      applied: recommendations.filter(r => r.status === 'APPLIED').length,
+      rejected: recommendations.filter(r => r.status === 'REJECTED').length
+    };
+  }, [recommendations]);
+
+  const filteredRecommendations = useMemo(() => {
+    return recommendations
+      .filter(rec => {
+        if (filters.status !== 'ALL' && rec.status !== filters.status) {
+          return false;
+        }
+
+        if (filters.category !== 'ALL') {
+          const { category } = getRecommendationCategory(rec);
+          if (category !== filters.category) return false;
+        }
+
+        if (filters.severity !== 'ALL') {
+          const matchedProd = rec.product_id ? products.find(p => p.id === rec.product_id) : undefined;
+          const { severity } = getRecommendationSeverity(rec, matchedProd);
+          if (severity !== filters.severity) return false;
+        }
+
+        if (filters.search.trim()) {
+          const q = filters.search.toLowerCase();
+          const matchedProd = rec.product_id ? products.find(p => p.id === rec.product_id) : undefined;
+          const matchesTitle = rec.title.toLowerCase().includes(q);
+          const matchesReason = rec.reason.toLowerCase().includes(q);
+          const matchesProduct = matchedProd ? matchedProd.name.toLowerCase().includes(q) : false;
+          const matchesAction = rec.action_data?.suggested_change
+            ? String(rec.action_data.suggested_change).toLowerCase().includes(q)
+            : false;
+          if (!matchesTitle && !matchesReason && !matchesProduct && !matchesAction) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (filters.sortBy === 'impact_desc') {
+          return (b.expected_simulated_impact || 0) - (a.expected_simulated_impact || 0);
+        }
+        if (filters.sortBy === 'confidence_desc') {
+          return (b.confidence || 0) - (a.confidence || 0);
+        }
+        if (filters.sortBy === 'frictions_desc') {
+          const countA = Number(a.action_data?.friction_count) || 1;
+          const countB = Number(b.action_data?.friction_count) || 1;
+          return countB - countA;
+        }
+        if (filters.sortBy === 'newest') {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+        return 0;
+      });
+  }, [recommendations, products, filters]);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-12">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-[var(--rzp-text)] flex items-center">
-          <Sparkles className="h-6 w-6 mr-2 text-[var(--rzp-ai)]" /> AI Optimizations & What-If Simulator
+        <h1 className="text-2xl font-bold text-[var(--rzp-text)] flex items-center tracking-tight">
+          <Sparkles className="h-6 w-6 mr-2.5 text-[var(--rzp-ai)]" />
+          Empirical Optimizations & What-If Simulator
         </h1>
-        <p className="text-sm text-[var(--rzp-text-muted)]">
-          Empirical recommendations derived from buyer friction and safe, in-memory What-If scenario experiments.
+        <p className="text-sm text-[var(--rzp-text-muted)] mt-1">
+          Actionable merchant intelligence discovered from autonomous buyer persona constraint checks and in-memory What-If scenario experiments.
         </p>
       </div>
 
-      {/* Safety & Truth Notice */}
-      <div className="bg-[var(--rzp-surface-subtle)] p-3.5 rounded-lg border border-[var(--rzp-border)] flex items-start text-xs">
-        <ShieldCheck className="h-5 w-5 text-[var(--rzp-primary)] mr-2.5 shrink-0" />
-        <div className="text-[var(--rzp-text-secondary)]">
-          <span className="font-semibold text-[var(--rzp-text)]">Zero Production Mutation Guarantee: </span>
-          The What-If engine runs 100% in-memory against deterministic simulation scenarios. Your live catalogue prices, inventory, and database records remain completely untouched.
-        </div>
+      {/* Visual Analytical Pipeline Header */}
+      <RecommendationPipelineHeader currentStep={currentStep} onStepClick={handleStepClick} />
+
+      {/* Aggregate Intelligence Summary Banner (MERCHANT INSIGHT) */}
+      <div id="merchant-insight" className="scroll-mt-6">
+        <RecommendationSummaryBanner
+          recommendations={recommendations}
+          products={products}
+          onRunSimulation={() => navigate('/simulation')}
+        />
       </div>
 
-      {/* SECTION 1: RECOMMENDATIONS */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      {/* SECTION 1: ACTIONABLE RECOMMENDATIONS (RECOMMENDED ACTION) */}
+      <div id="recommended-actions" className="space-y-4 pt-2 scroll-mt-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-bold text-[var(--rzp-text)] flex items-center">
-              <Zap className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" /> Empirical Recommendations
+            <h2 className="text-lg font-bold text-[var(--rzp-text)] flex items-center">
+              <Zap className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" /> Actionable Catalogue Interventions
             </h2>
             <p className="text-xs text-[var(--rzp-text-muted)]">
-              Discovered from buyer persona constraint rejections in your active catalogue.
+              Derived from buyer persona frictions and verified ranking penalties.
             </p>
           </div>
           <span className="text-xs font-semibold text-[var(--rzp-text-muted)]">
-            {recommendations.length} Active {recommendations.length === 1 ? 'Recommendation' : 'Recommendations'}
+            Showing {filteredRecommendations.length} of {recommendations.length} recommendations
           </span>
         </div>
 
+        {/* Filter Toolbar */}
+        {recommendations.length > 0 && (
+          <RecommendationFilters
+            filters={filters}
+            onChange={setFilters}
+            counts={statusCounts}
+            categories={availableCategories}
+          />
+        )}
+
+        {/* Recommendation Cards Content */}
         {loadingRecs ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-7 w-7 animate-spin text-[var(--rzp-primary)]" />
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-[var(--rzp-border)] shadow-sm space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-[var(--rzp-primary)]" />
+            <p className="text-xs font-semibold text-[var(--rzp-text-muted)]">Loading evidence-backed recommendations...</p>
           </div>
         ) : recommendations.length === 0 ? (
           <Card className="border-dashed bg-gray-50/50">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Sparkles className="h-10 w-10 text-gray-300 mb-3" />
-              <h3 className="text-base font-semibold text-[var(--rzp-text)]">No Active Friction Points</h3>
-              <p className="text-xs text-[var(--rzp-text-muted)] max-w-md mt-1">
-                Your products are currently performing well against default buyer constraints, or no friction has been detected yet.
+              <div className="w-12 h-12 rounded-full bg-[var(--rzp-ai-soft)] flex items-center justify-center text-[var(--rzp-ai)] mb-3">
+                <Bot className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-semibold text-[var(--rzp-text)]">No Active Recommendations</h3>
+              <p className="text-xs text-[var(--rzp-text-muted)] max-w-md mt-1 mb-5">
+                Recommendations are generated when synthetic buyer personas encounter price ceiling rejections, unstated return policies, missing delivery timelines, or inventory stockouts.
               </p>
+              <Button variant="ai" size="sm" onClick={() => navigate('/simulation')}>
+                <Play className="h-4 w-4 mr-1.5" /> Launch Buyer Simulation
+              </Button>
+            </CardContent>
+          </Card>
+        ) : filteredRecommendations.length === 0 ? (
+          <Card className="border-dashed bg-gray-50/50">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertTriangle className="h-8 w-8 text-amber-500 mb-2" />
+              <h3 className="text-sm font-semibold text-[var(--rzp-text)]">No Recommendations Match Selected Filters</h3>
+              <p className="text-xs text-[var(--rzp-text-muted)] mt-1 mb-4">
+                Try adjusting your search query, status tab, or category filters.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilters({ search: '', status: 'ALL', category: 'ALL', severity: 'ALL', sortBy: 'impact_desc' })}
+              >
+                Reset Filters
+              </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {recommendations.map((rec) => {
-              const matchedProd = rec.product_id ? products.find(p => p.id === rec.product_id) : null;
-
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {filteredRecommendations.map((rec) => {
+              const matchedProd = rec.product_id ? products.find(p => p.id === rec.product_id) : undefined;
               return (
-                <Card 
-                  key={rec.id} 
-                  className="border-l-4 border-l-[var(--rzp-ai)] flex flex-col justify-between hover:shadow-md transition-shadow"
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start gap-2">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--rzp-ai)] bg-[var(--rzp-ai-soft)] px-2 py-0.5 rounded">
-                          {rec.type}
-                        </span>
-                        <CardTitle className="text-base mt-2">{rec.title}</CardTitle>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-xs font-semibold text-[var(--rzp-success)] bg-[var(--rzp-success-soft)] px-2 py-0.5 rounded">
-                          +{(rec.expected_simulated_impact * 100).toFixed(0)}% Impact
-                        </span>
-                        <p className="text-[10px] text-[var(--rzp-text-muted)] mt-1">
-                          Confidence: {(rec.confidence * 100).toFixed(0)}%
-                        </p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 pt-1">
-                    <div className="p-2.5 bg-gray-50 rounded-md border border-gray-100 text-xs text-[var(--rzp-text-secondary)]">
-                      <strong className="text-[var(--rzp-text)]">Detected Friction: </strong>
-                      {rec.reason}
-                    </div>
-
-                    {matchedProd && (
-                      <div className="text-xs text-[var(--rzp-text-muted)] flex items-center justify-between">
-                        <span>Target: <strong>{matchedProd.name}</strong></span>
-                        <span>Current Price: <strong>{formatPrice(matchedProd.price)}</strong></span>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t border-[var(--rzp-border)] flex items-center justify-between">
-                      <span className="text-[10px] text-[var(--rzp-text-muted)]">Source: Friction Diagnostics</span>
-                      <Button 
-                        variant="ai" 
-                        size="sm" 
-                        onClick={() => handleApplyRecommendationToWhatIf(rec)}
-                        className="text-xs"
-                      >
-                        <TestTube className="h-3.5 w-3.5 mr-1" /> Test with What-If <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <RecommendationCard
+                  key={rec.id}
+                  recommendation={rec}
+                  product={matchedProd}
+                  onStatusChange={handleStatusChange}
+                  onTestWithWhatIf={handleApplyRecommendationToWhatIf}
+                />
               );
             })}
           </div>
@@ -241,18 +378,25 @@ export const Optimization = () => {
       </div>
 
       {/* SECTION 2: WHAT-IF INTERACTIVE WORKBENCH */}
-      <div id="what-if-section" className="space-y-4 pt-4 border-t border-[var(--rzp-border)]">
-        <div>
-          <h2 className="text-base font-bold text-[var(--rzp-text)] flex items-center">
-            <TestTube className="h-4 w-4 mr-2 text-[var(--rzp-primary)]" /> Interactive What-If Simulator
-          </h2>
-          <p className="text-xs text-[var(--rzp-text-muted)]">
-            Simulate the exact score and selection rate delta if you modify price, delivery speed, or return policies.
-          </p>
+      <div id="what-if-section" className="space-y-4 pt-6 border-t border-[var(--rzp-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--rzp-text)] flex items-center">
+              <TestTube className="h-5 w-5 mr-2 text-[var(--rzp-primary)]" /> Interactive What-If Simulator
+            </h2>
+            <p className="text-xs text-[var(--rzp-text-muted)]">
+              Simulate the exact match score and selection rate delta if you modify price, delivery speed, or return policies in-memory.
+            </p>
+          </div>
+
+          <div className="bg-[var(--rzp-surface-subtle)] px-3 py-1.5 rounded-lg border border-[var(--rzp-border)] flex items-center text-xs text-[var(--rzp-text-secondary)]">
+            <ShieldCheck className="h-4 w-4 text-[var(--rzp-primary)] mr-1.5 shrink-0" />
+            <span>Zero Production Mutation Guarantee</span>
+          </div>
         </div>
 
         {whatIfError && (
-          <div className="p-3.5 bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] rounded-lg text-xs font-medium flex items-center">
+          <div className="p-3.5 bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] rounded-lg text-xs font-medium flex items-center border border-red-200">
             <AlertTriangle className="h-4 w-4 mr-2 shrink-0" />
             {whatIfError}
           </div>
@@ -263,16 +407,19 @@ export const Optimization = () => {
           <div className="lg:col-span-5">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">Configure Experiment</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                  <span>Configure Experiment</span>
+                  <span className="text-[10px] text-[var(--rzp-text-muted)] font-normal uppercase tracking-wider">In-Memory Override</span>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleRunWhatIf} className="space-y-4">
                   <div>
-                    <label className="text-xs font-medium text-[var(--rzp-text)] block mb-1">Target Product</label>
+                    <label className="text-xs font-semibold text-[var(--rzp-text)] block mb-1.5">Target Product</label>
                     <select
                       value={selectedProductId}
                       onChange={(e) => setSelectedProductId(e.target.value)}
-                      className="w-full h-9 rounded-md border border-[var(--rzp-border-strong)] bg-white px-3 text-xs focus:ring-2 focus:ring-[var(--rzp-primary)] focus:outline-none"
+                      className="w-full h-9 rounded-lg border border-[var(--rzp-border-strong)] bg-white px-3 text-xs focus:ring-2 focus:ring-[var(--rzp-primary)] focus:outline-none"
                     >
                       <option value="">All Products in Catalogue</option>
                       {products.map(p => (
@@ -284,9 +431,9 @@ export const Optimization = () => {
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-[var(--rzp-text)] block mb-1">Hypothesis</label>
+                    <label className="text-xs font-semibold text-[var(--rzp-text)] block mb-1.5">Experiment Hypothesis</label>
                     <Input
-                      placeholder="e.g. Reduce price to ₹4,499 to win Budget Conscious buyers"
+                      placeholder="e.g. Reduce price to ₹4,499 to win Budget-Conscious buyers"
                       value={hypothesis}
                       onChange={(e) => setHypothesis(e.target.value)}
                       className="text-xs"
@@ -296,7 +443,7 @@ export const Optimization = () => {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-[var(--rzp-text)] block mb-1">
+                      <label className="text-xs font-semibold text-[var(--rzp-text)] block mb-1.5">
                         Proposed Price (₹)
                       </label>
                       <Input
@@ -308,7 +455,7 @@ export const Optimization = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-medium text-[var(--rzp-text)] block mb-1">
+                      <label className="text-xs font-semibold text-[var(--rzp-text)] block mb-1.5">
                         Delivery Speed (Days)
                       </label>
                       <Input
@@ -322,7 +469,7 @@ export const Optimization = () => {
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-[var(--rzp-text)] block mb-1">
+                    <label className="text-xs font-semibold text-[var(--rzp-text)] block mb-1.5">
                       Return Window (Days)
                     </label>
                     <Input
@@ -345,9 +492,9 @@ export const Optimization = () => {
                         setReturnDaysOverride('');
                         setWhatIfResult(null);
                       }}
-                      className="text-xs"
+                      className="text-xs text-gray-500 hover:text-[var(--rzp-text)]"
                     >
-                      <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                      <RotateCcw className="h-3 w-3 mr-1" /> Reset Overrides
                     </Button>
                     <Button type="submit" variant="primary" size="sm" isLoading={whatIfLoading}>
                       <Play className="h-3.5 w-3.5 mr-1" /> Run What-If Simulation
@@ -361,36 +508,36 @@ export const Optimization = () => {
           {/* Results Comparison View */}
           <div className="lg:col-span-7">
             {!whatIfResult && !whatIfLoading && (
-              <Card className="border-dashed bg-gray-50/50 h-full flex flex-col items-center justify-center p-8 text-center">
+              <Card className="border-dashed bg-gray-50/50 h-full flex flex-col items-center justify-center p-8 text-center min-h-[300px]">
                 <TestTube className="h-10 w-10 text-gray-300 mb-3" />
                 <h3 className="text-sm font-semibold text-[var(--rzp-text)]">Ready to Simulate What-If Delta</h3>
-                <p className="text-xs text-[var(--rzp-text-muted)] max-w-sm mt-1">
-                  Adjust parameter overrides on the left and execute the simulation to observe comparative persona match rates.
+                <p className="text-xs text-[var(--rzp-text-muted)] max-w-sm mt-1 mb-4">
+                  Select a recommendation above and click <strong>Test in What-If</strong>, or adjust parameters on the left to simulate comparative persona match rates safely.
                 </p>
               </Card>
             )}
 
             {whatIfLoading && (
-              <Card className="h-full flex flex-col items-center justify-center p-12 text-center border-[var(--rzp-primary)] animate-pulse">
+              <Card className="h-full flex flex-col items-center justify-center p-12 text-center border-[var(--rzp-primary)] animate-pulse min-h-[300px]">
                 <Loader2 className="h-8 w-8 animate-spin text-[var(--rzp-primary)] mb-3" />
                 <h3 className="text-sm font-semibold text-[var(--rzp-text)]">Evaluating Baseline vs Proposed Catalogue...</h3>
-                <p className="text-xs text-[var(--rzp-text-muted)] mt-1">Running comparative personas in memory</p>
+                <p className="text-xs text-[var(--rzp-text-muted)] mt-1">Executing persona decision scoring in-memory</p>
               </Card>
             )}
 
             {whatIfResult && !whatIfLoading && (
               <div className="space-y-4 animate-in fade-in duration-300">
                 {/* Comparison Card */}
-                <Card className="border-2 border-[var(--rzp-primary)]">
+                <Card className="border-2 border-[var(--rzp-primary)] shadow-sm">
                   <CardHeader className="pb-3 bg-[var(--rzp-primary-soft)] border-b border-[var(--rzp-primary)]">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm text-[var(--rzp-primary)] flex items-center">
+                      <CardTitle className="text-sm text-[var(--rzp-primary)] flex items-center font-bold">
                         <Sparkles className="h-4 w-4 mr-1.5" /> What-If Comparative Outcome
                       </CardTitle>
                       <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center ${
                         whatIfResult.delta_percentage >= 0
-                          ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)]'
-                          : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)]'
+                          ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)] border border-[var(--rzp-success)]'
+                          : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] border border-[var(--rzp-danger)]'
                       }`}>
                         {whatIfResult.delta_percentage >= 0 ? (
                           <TrendingUp className="h-3.5 w-3.5 mr-1" />
@@ -404,11 +551,11 @@ export const Optimization = () => {
                   <CardContent className="pt-4 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       {/* Baseline Box */}
-                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+                      <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
                         <span className="font-bold text-gray-500 uppercase tracking-wider block text-[10px]">
                           Current Baseline
                         </span>
-                        <div className="text-lg font-bold text-[var(--rzp-text)]">
+                        <div className="text-xl font-black text-[var(--rzp-text)]">
                           {(
                             (whatIfResult.baseline_metrics.simulated_selection_rate !== undefined
                               ? whatIfResult.baseline_metrics.simulated_selection_rate
@@ -417,7 +564,7 @@ export const Optimization = () => {
                               : 0) * 100
                           ).toFixed(1)}% Match
                         </div>
-                        <p className="text-[var(--rzp-text-muted)]">
+                        <p className="text-[11px] text-[var(--rzp-text-muted)]">
                           {whatIfResult.baseline_metrics.average_score !== undefined
                             ? `Avg Score: ${whatIfResult.baseline_metrics.average_score}`
                             : whatIfResult.baseline_metrics.average_order_value !== undefined
@@ -427,11 +574,11 @@ export const Optimization = () => {
                       </div>
 
                       {/* Proposed Box */}
-                      <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-1.5">
+                      <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-1.5">
                         <span className="font-bold text-[var(--rzp-ai)] uppercase tracking-wider block text-[10px]">
                           Proposed (Simulated)
                         </span>
-                        <div className="text-lg font-bold text-[var(--rzp-primary)]">
+                        <div className="text-xl font-black text-[var(--rzp-primary)]">
                           {(
                             (whatIfResult.simulated_metrics.simulated_selection_rate !== undefined
                               ? whatIfResult.simulated_metrics.simulated_selection_rate
@@ -440,7 +587,7 @@ export const Optimization = () => {
                               : 0) * 100
                           ).toFixed(1)}% Match
                         </div>
-                        <p className="text-[var(--rzp-text-muted)]">
+                        <p className="text-[11px] text-[var(--rzp-text-muted)]">
                           {whatIfResult.simulated_metrics.average_score !== undefined
                             ? `Avg Score: ${whatIfResult.simulated_metrics.average_score}`
                             : whatIfResult.simulated_metrics.average_order_value !== undefined

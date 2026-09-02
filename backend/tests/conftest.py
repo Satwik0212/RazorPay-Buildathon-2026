@@ -28,6 +28,12 @@ def db_session():
     Base.metadata.create_all(bind=test_engine)
     db = TestingSessionLocal()
     try:
+        from scripts.seed_personas import DEFAULT_PERSONAS
+        from app.models.buyer_persona import BuyerPersona
+        for p_data in DEFAULT_PERSONAS:
+            persona = BuyerPersona(**p_data)
+            db.add(persona)
+        db.commit()
         yield db
     finally:
         db.close()

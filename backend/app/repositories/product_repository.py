@@ -51,9 +51,14 @@ class ProductRepository:
 
         total = self.db.execute(count_stmt).scalar() or 0
         products = list(
-            self.db.execute(stmt.limit(limit).offset(offset)).unique().scalars().all()
+            self.db.execute(stmt.order_by(Product.id).limit(limit).offset(offset)).unique().scalars().all()
         )
         return products, total
+
+    def list_categories(self, merchant_id: uuid.UUID) -> List[str]:
+        stmt = select(Product.category).where(Product.merchant_id == merchant_id).where(Product.category != None).distinct()
+        categories = self.db.execute(stmt).scalars().all()
+        return [c for c in categories if c]
 
     def create_product(self, product: Product, initial_quantity: int = 10) -> Product:
         self.db.add(product)

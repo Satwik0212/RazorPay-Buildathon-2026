@@ -1,5 +1,5 @@
-import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { cn } from '../utils/cn';
 import { 
   LayoutDashboard, 
@@ -10,16 +10,56 @@ import {
   ReceiptText,
   LineChart,
   Settings,
-  ShoppingBag
+  ShoppingBag,
+  Megaphone
 } from 'lucide-react';
+import { authApi } from '../api/auth';
 
 export const AppLayout = () => {
+  const [isInitializing, setIsInitializing] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const initSession = async () => {
+      if (location.pathname.startsWith('/buyer')) {
+        setIsInitializing(false);
+        return;
+      }
+      
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        await authApi.getOrInitMerchantId();
+      } else {
+        // Validate if the current token belongs to the demo merchant.
+        // If it's a stale test user from a previous session, re-initialize the demo.
+        try {
+          const me = await authApi.getMe();
+          if (me.data.email !== 'merchant@demo.com') {
+             localStorage.removeItem('access_token');
+             await authApi.getOrInitMerchantId();
+          }
+        } catch {
+          localStorage.removeItem('access_token');
+          await authApi.getOrInitMerchantId();
+        }
+      }
+      setIsInitializing(false);
+    };
+    initSession();
+  }, [location.pathname]);
+
+  if (isInitializing) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Initializing session...</div>;
+  }
+
   const navItems = [
     { name: 'Overview', to: '/dashboard', icon: LayoutDashboard },
     { name: 'Catalogue', to: '/catalogue', icon: Package },
     { name: 'AI Buyers', to: '/buyer', icon: Bot },
     { name: 'Simulations', to: '/simulation', icon: TestTube },
     { name: 'Optimizations', to: '/optimization', icon: Activity },
+    { name: 'Campaigns', to: '/campaigns', icon: Megaphone },
     { name: 'Transactions', to: '/transactions', icon: ReceiptText },
     { name: 'Analytics', to: '/analytics', icon: LineChart },
     { name: 'Settings', to: '/settings', icon: Settings },

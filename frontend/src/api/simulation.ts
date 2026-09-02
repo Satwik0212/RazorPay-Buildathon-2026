@@ -8,4 +8,6 @@ export const simulationApi = {
     apiClient.get<Recommendation[]>('/optimization/recommendations'),
   runWhatIf: (data: WhatIfRequest) =>
     apiClient.post<WhatIfResponse>('/optimization/what-if', data),
+  updateRecommendationStatus: (id: string, status: string) =>
+    apiClient.patch<Recommendation>(`/optimization/recommendations/${id}/status`, { status }),
 };

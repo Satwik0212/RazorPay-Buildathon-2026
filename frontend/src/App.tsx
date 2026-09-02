@@ -12,6 +12,8 @@ import { Analytics } from './pages/merchant/Analytics';
 import { Settings } from './pages/merchant/Settings';
 import { BuyerFlow } from './pages/buyer/BuyerFlow';
 
+import { Campaigns } from './pages/merchant/Campaigns';
+
 export const App = () => {
   return (
     <BrowserRouter>
@@ -25,6 +27,7 @@ export const App = () => {
           <Route path="/catalogue" element={<Catalogue />} />
           <Route path="/simulation" element={<SimulationDashboard />} />
           <Route path="/optimization" element={<Optimization />} />
+          <Route path="/campaigns" element={<Campaigns />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<Settings />} />

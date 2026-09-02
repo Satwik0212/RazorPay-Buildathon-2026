@@ -1,6 +1,7 @@
 import copy
 from typing import Dict, Any, List, Optional
 from app.simulation.engine import simulation_engine
+from app.models.buyer_persona import BuyerPersona
 
 
 class WhatIfService:
@@ -61,7 +62,8 @@ class WhatIfService:
         hypothesis: str,
         baseline_catalogue: List[Dict[str, Any]],
         modifications: Dict[str, Any],
-        scenarios: Optional[List[Dict[str, Any]]] = None
+        scenarios: Optional[List[Dict[str, Any]]] = None,
+        db_personas: Optional[List[BuyerPersona]] = None
     ) -> Dict[str, Any]:
         """
         Executes comparative in-memory simulations for baseline vs modified catalogue state.
@@ -89,13 +91,18 @@ class WhatIfService:
                 p["product_metadata"] = p_meta
 
         if not scenarios:
-            scenarios = [
-                {"name": "Budget Buyer", "weights": {"price": 0.50, "offers": 0.25, "delivery": 0.10, "quality": 0.10, "returns": 0.05}, "intent": {"max_budget": 500000}},
-                {"name": "Speed Buyer", "weights": {"delivery": 0.55, "metadata": 0.20, "quality": 0.15, "price": 0.10}, "intent": {"delivery_deadline_days": 2}},
-                {"name": "Quality Buyer", "weights": {"quality": 0.50, "metadata": 0.20, "returns": 0.15, "delivery": 0.10, "price": 0.05}, "intent": {}},
-                {"name": "Feature Buyer", "weights": {"metadata": 0.50, "quality": 0.25, "price": 0.15, "delivery": 0.10}, "intent": {}},
-                {"name": "Balanced Buyer", "weights": {"price": 0.25, "quality": 0.25, "delivery": 0.20, "returns": 0.15, "offers": 0.10, "metadata": 0.05}, "intent": {}},
-            ]
+            scenarios = []
+            if db_personas:
+                for p in db_personas:
+                    intent_dict = {"max_budget": p.budget_max}
+                    if "SPEED" in p.name.upper():
+                        intent_dict["delivery_deadline_days"] = 2
+                    
+                    scenarios.append({
+                        "name": p.name,
+                        "weights": p.weights,
+                        "intent": intent_dict
+                    })
 
         baseline_scores = []
         proposed_scores = []
@@ -167,3 +174,4 @@ class WhatIfService:
 
 
 what_if_service = WhatIfService()
+

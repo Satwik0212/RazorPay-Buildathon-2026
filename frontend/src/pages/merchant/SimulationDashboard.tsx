@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { 
@@ -14,25 +14,62 @@ import {
   Filter, 
   Sliders,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Lightbulb
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { personasApi } from '../../api/personas';
 import { productsApi } from '../../api/products';
 import { authApi } from '../../api/auth';
 import type { BuyerPersona, Product, SimulationResponse } from '../../types';
+import { RecommendationPipelineHeader, type PipelineStepId } from '../../components/features/recommendations';
 
-export const SimulationDashboard = () => {
+export const SimulationDashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stepParam = searchParams.get('step') as PipelineStepId | null;
+  const currentStep: PipelineStepId = (stepParam === 'friction' || stepParam === 'insight') ? stepParam : 'simulation';
+
   const [simulating, setSimulating] = useState(false);
   const [results, setResults] = useState<SimulationResponse | null>(null);
   const [error, setError] = useState('');
   
   // Personas & Products
   const [personas, setPersonas] = useState<BuyerPersona[]>([]);
-  const [selectedProfiles, setSelectedProfiles] = useState<string[]>(["BUDGET", "SPEED", "QUALITY", "FEATURE", "BALANCED"]);
+  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [scenarioCount, setScenarioCount] = useState<number>(10);
   const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // Scroll to section when step param changes
+  useEffect(() => {
+    if (stepParam === 'friction') {
+      const el = document.getElementById('friction-section') || document.getElementById('simulation-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (stepParam === 'simulation') {
+      const el = document.getElementById('simulation-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (stepParam === 'insight') {
+      const el = document.getElementById('logs-section') || document.getElementById('simulation-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [stepParam, results]);
+
+  const handleStepClick = (step: PipelineStepId) => {
+    if (step === 'simulation') {
+      setSearchParams({ step: 'simulation' });
+      const el = document.getElementById('simulation-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (step === 'friction') {
+      setSearchParams({ step: 'friction' });
+      const el = document.getElementById('friction-section') || document.getElementById('simulation-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (step === 'insight') {
+      navigate('/optimization?step=insight');
+    } else if (step === 'action') {
+      navigate('/optimization?step=action');
+    }
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -44,6 +81,7 @@ export const SimulationDashboard = () => {
 
         if (personaRes.data && personaRes.data.length > 0) {
           setPersonas(personaRes.data);
+          setSelectedProfiles(personaRes.data.map((p: BuyerPersona) => p.name.split(' ')[0].toUpperCase()));
         }
 
         const items = productRes.data?.items || [];
@@ -63,7 +101,7 @@ export const SimulationDashboard = () => {
   const toggleProfile = (profile: string) => {
     setSelectedProfiles(prev => {
       if (prev.includes(profile)) {
-        if (prev.length === 1) return prev; // keep at least one
+        if (prev.length === 1) return prev;
         return prev.filter(p => p !== profile);
       } else {
         return [...prev, profile];
@@ -94,30 +132,47 @@ export const SimulationDashboard = () => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(price / 100);
   };
 
+  const getPersonaIcon = (name: string) => {
+    const n = name.toUpperCase();
+    if (n.includes('BUDGET')) return '💰';
+    if (n.includes('SPEED')) return '⚡';
+    if (n.includes('QUALITY')) return '⭐';
+    if (n.includes('FEATURE')) return '🔍';
+    if (n.includes('BALANCED')) return '⚖️';
+    return '🤖';
+  };
+
+  const totalFrictionSignals = results?.summary_metrics?.friction_distribution
+    ? Object.values(results.summary_metrics.friction_distribution).reduce((a, b) => a + b, 0)
+    : 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--rzp-text)] flex items-center">
-            <Bot className="h-6 w-6 mr-2 text-[var(--rzp-ai)]" /> Synthetic Buyer Simulation
+          <h1 className="text-2xl font-bold text-[var(--rzp-text)] flex items-center tracking-tight">
+            <Bot className="h-6 w-6 mr-2.5 text-[var(--rzp-ai)]" /> Synthetic Buyer Simulation
           </h1>
-          <p className="text-sm text-[var(--rzp-text-muted)]">
+          <p className="text-sm text-[var(--rzp-text-muted)] mt-1">
             Empirically diagnose how autonomous AI buyer personas discover, evaluate, and rank your catalogue.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={runSimulation} isLoading={simulating} variant="ai" className="px-5">
+          <Button onClick={runSimulation} isLoading={simulating} variant="ai" className="px-5 shadow-sm font-semibold">
             <Play className="h-4 w-4 mr-2" /> Run Simulation
           </Button>
         </div>
       </div>
+
+      {/* Visual Analytical Pipeline Header */}
+      <RecommendationPipelineHeader currentStep={currentStep} onStepClick={handleStepClick} />
       
       {/* Simulation Truth & Safety Notice */}
       <div className="bg-[var(--rzp-warning-soft)] p-3.5 rounded-lg border border-[var(--rzp-warning)] flex items-start text-xs text-[var(--rzp-warning)]">
         <ShieldAlert className="h-5 w-5 mr-2.5 shrink-0" />
         <div>
-          <p className="font-semibold text-sm">Simulated Analytical Environment</p>
+          <p className="font-semibold text-sm text-[var(--rzp-text)]">Simulated Analytical Environment</p>
           <p className="mt-0.5 text-[var(--rzp-text-secondary)]">
             All simulation scores, matches, and rejections are calculated by the deterministic AI evaluation engine. Results do <strong>NOT</strong> modify database catalogue state or fabricate production revenue.
           </p>
@@ -125,20 +180,21 @@ export const SimulationDashboard = () => {
       </div>
 
       {error && (
-        <div className="p-4 bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] rounded-lg text-sm font-medium flex items-center">
+        <div className="p-4 bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] rounded-lg text-sm font-medium flex items-center border border-red-200">
           <AlertTriangle className="h-5 w-5 mr-2 shrink-0" />
           {error}
         </div>
       )}
 
       {/* Simulation Configuration Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center">
-              <Sliders className="h-4 w-4 mr-2 text-[var(--rzp-primary)]" /> Simulation Parameters
-            </CardTitle>
-            <span className="text-xs text-[var(--rzp-text-muted)]">Target: Active Catalogue Items</span>
+      <div id="simulation-section" className="scroll-mt-6">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center font-bold">
+                <Sliders className="h-4 w-4 mr-2 text-[var(--rzp-primary)]" /> Simulation Parameters
+              </CardTitle>
+            <span className="text-xs text-[var(--rzp-text-muted)] font-medium">Target: Active Catalogue Items</span>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -147,41 +203,41 @@ export const SimulationDashboard = () => {
               Select Target Buyer Personas
             </label>
             <div className="flex flex-wrap gap-2">
-              {['BUDGET', 'SPEED', 'QUALITY', 'FEATURE', 'BALANCED'].map(profile => {
-                const isSelected = selectedProfiles.includes(profile);
+              {personas.map(persona => {
+                const profileCode = persona.name.split(' ')[0].toUpperCase();
+                const isSelected = selectedProfiles.includes(profileCode);
                 return (
                   <button
-                    key={profile}
+                    key={persona.id}
                     type="button"
-                    onClick={() => toggleProfile(profile)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                    onClick={() => toggleProfile(profileCode)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       isSelected
-                        ? 'bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)] text-[var(--rzp-ai)] shadow-sm'
+                        ? 'bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)] text-[var(--rzp-ai)] shadow-xs'
                         : 'bg-white border-[var(--rzp-border)] text-[var(--rzp-text-muted)] hover:bg-gray-50'
                     }`}
                   >
-                    {profile === 'BUDGET' && '💰 Budget Conscious'}
-                    {profile === 'SPEED' && '⚡ Speed First'}
-                    {profile === 'QUALITY' && '⭐ Quality & Brand'}
-                    {profile === 'FEATURE' && '🔍 Feature & Specs'}
-                    {profile === 'BALANCED' && '⚖️ Balanced Buyer'}
+                    {getPersonaIcon(persona.name)} {persona.name}
                   </button>
                 );
               })}
+              {personas.length === 0 && (
+                <span className="text-xs text-gray-500 italic">Loading personas from database...</span>
+              )}
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-[var(--rzp-border)]">
             <div className="flex items-center space-x-3">
-              <span className="text-xs font-medium text-[var(--rzp-text-secondary)]">Scenario Volume:</span>
+              <span className="text-xs font-semibold text-[var(--rzp-text-secondary)]">Scenario Volume:</span>
               {[5, 10, 20].map(cnt => (
                 <button
                   key={cnt}
                   type="button"
                   onClick={() => setScenarioCount(cnt)}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold border ${
+                  className={`px-3 py-1 rounded-md text-xs font-bold border transition-all ${
                     scenarioCount === cnt
-                      ? 'bg-[var(--rzp-primary)] text-white border-[var(--rzp-primary)]'
+                      ? 'bg-[var(--rzp-primary)] text-white border-[var(--rzp-primary)] shadow-2xs'
                       : 'bg-white text-[var(--rzp-text-secondary)] border-[var(--rzp-border)] hover:bg-gray-50'
                   }`}
                 >
@@ -190,12 +246,13 @@ export const SimulationDashboard = () => {
               ))}
             </div>
 
-            <div className="text-xs text-[var(--rzp-text-muted)]">
+            <div className="text-xs text-[var(--rzp-text-muted)] font-medium">
               Evaluates hard constraint filters + soft scoring trade-offs
             </div>
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Loading State */}
       {simulating && (
@@ -206,7 +263,7 @@ export const SimulationDashboard = () => {
               <Bot className="h-6 w-6 text-[var(--rzp-ai)] absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-[var(--rzp-text)]">
+              <h3 className="text-lg font-bold text-[var(--rzp-text)]">
                 Evaluating Persona Decision Trees...
               </h3>
               <p className="text-xs text-[var(--rzp-text-muted)] mt-1">
@@ -238,6 +295,29 @@ export const SimulationDashboard = () => {
       {/* Live Simulation Results */}
       {results && !simulating && (
         <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Transition Highlight Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 via-indigo-50 to-white border border-[var(--rzp-ai)] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg bg-[var(--rzp-ai)] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Lightbulb className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[var(--rzp-text)]">
+                  Simulation Complete: {totalFrictionSignals} Friction {totalFrictionSignals === 1 ? 'Signal' : 'Signals'} Detected
+                </h3>
+                <p className="text-xs text-[var(--rzp-text-secondary)]">
+                  The AI scoring engine has mapped these drop-offs to actionable catalogue interventions.
+                </p>
+              </div>
+            </div>
+
+            <Link to="/optimization">
+              <Button variant="primary" size="sm" className="whitespace-nowrap shadow-sm font-semibold">
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" /> View Recommendations <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </Link>
+          </div>
+
           {/* Summary KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <Card className="bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)]">
@@ -247,7 +327,7 @@ export const SimulationDashboard = () => {
                   <Bot className="h-4 w-4 text-[var(--rzp-ai)]" />
                 </div>
                 <div className="mt-2 flex items-baseline">
-                  <p className="text-3xl font-bold text-[var(--rzp-text)]">
+                  <p className="text-3xl font-extrabold text-[var(--rzp-text)]">
                     {((results.summary_metrics.constraint_satisfaction_rate || 0) * 100).toFixed(1)}%
                   </p>
                   <span className="ml-2 text-xs font-semibold text-[var(--rzp-success)]">
@@ -264,7 +344,7 @@ export const SimulationDashboard = () => {
                   <CheckCircle2 className="h-4 w-4 text-[var(--rzp-success)]" />
                 </div>
                 <div className="mt-2 flex items-baseline">
-                  <p className="text-3xl font-bold text-[var(--rzp-text)]">
+                  <p className="text-3xl font-extrabold text-[var(--rzp-text)]">
                     {(
                       results.summary_metrics.average_score !== undefined
                         ? results.summary_metrics.average_score
@@ -283,7 +363,7 @@ export const SimulationDashboard = () => {
                   <Filter className="h-4 w-4 text-[var(--rzp-primary)]" />
                 </div>
                 <div className="mt-2 flex items-baseline">
-                  <p className="text-3xl font-bold text-[var(--rzp-text)]">
+                  <p className="text-3xl font-extrabold text-[var(--rzp-text)]">
                     {results.scenario_count}
                   </p>
                   <span className="ml-2 text-xs text-[var(--rzp-text-muted)]">Deterministic runs</span>
@@ -294,52 +374,55 @@ export const SimulationDashboard = () => {
 
           {/* Friction Diagnostics Section */}
           {results.summary_metrics.friction_distribution && Object.keys(results.summary_metrics.friction_distribution).length > 0 && (
-            <Card className="border-l-4 border-l-[var(--rzp-warning)]">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center text-[var(--rzp-text)]">
-                    <AlertTriangle className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" />
-                    Detected Buyer Friction Distribution
-                  </CardTitle>
-                  <span className="text-xs font-semibold text-[var(--rzp-warning)] bg-[var(--rzp-warning-soft)] px-2.5 py-0.5 rounded-full">
-                    {Object.values(results.summary_metrics.friction_distribution).reduce((a, b) => a + b, 0)} friction signals
-                  </span>
-                </div>
-                <p className="text-xs text-[var(--rzp-text-muted)]">
-                  Primary constraint bottlenecks and ranking penalties encountered by AI buyer personas.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
-                  {Object.entries(results.summary_metrics.friction_distribution).map(([reason, count]) => (
-                    <div key={reason} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
-                      <span className="text-xs font-medium text-[var(--rzp-text)] font-mono">{reason}</span>
-                      <span className="text-xs font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
-                        {count} hits
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <div id="friction-section" className="scroll-mt-6">
+              <Card className="border-l-4 border-l-[var(--rzp-warning)]">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center text-[var(--rzp-text)] font-bold">
+                      <AlertTriangle className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" />
+                      Detected Buyer Friction Distribution
+                    </CardTitle>
+                    <span className="text-xs font-semibold text-[var(--rzp-warning)] bg-[var(--rzp-warning-soft)] px-2.5 py-0.5 rounded-full border border-amber-200">
+                      {totalFrictionSignals} friction signals
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--rzp-text-muted)]">
+                    Primary constraint bottlenecks and ranking penalties encountered by AI buyer personas.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+                    {Object.entries(results.summary_metrics.friction_distribution).map(([reason, count]) => (
+                      <div key={reason} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+                        <span className="text-xs font-semibold text-[var(--rzp-text)] font-mono">{reason}</span>
+                        <span className="text-xs font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
+                          {count} hits
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* Detailed Persona Decision Logs */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <div>
-                <CardTitle className="text-base">Scenario Decision Logs</CardTitle>
-                <p className="text-xs text-[var(--rzp-text-muted)]">
-                  Inspect the step-by-step evaluation, product match, and constraint checks for each scenario.
-                </p>
-              </div>
-              <Link to="/optimization">
-                <Button variant="outline" size="sm">
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5 text-[var(--rzp-ai)]" /> View Recommendations
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
+          <div id="logs-section" className="scroll-mt-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-base font-bold">Scenario Decision Logs</CardTitle>
+                  <p className="text-xs text-[var(--rzp-text-muted)]">
+                    Inspect the step-by-step evaluation, product match, and constraint checks for each scenario.
+                  </p>
+                </div>
+                <Link to="/optimization">
+                  <Button variant="outline" size="sm" className="font-semibold">
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5 text-[var(--rzp-ai)]" /> View Recommendations
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
               <div className="space-y-3">
                 {results.results.map((item, idx) => {
                   const isExpanded = expandedRow === idx;
@@ -454,17 +537,18 @@ export const SimulationDashboard = () => {
               </div>
             </CardContent>
           </Card>
+          </div>
 
           {/* Next Step CTA */}
-          <div className="p-4 bg-[var(--rzp-surface-subtle)] border border-[var(--rzp-border)] rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="p-5 bg-[var(--rzp-surface-subtle)] border border-[var(--rzp-border)] rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
             <div>
-              <h4 className="text-sm font-semibold text-[var(--rzp-text)]">Ready to resolve detected buyer frictions?</h4>
+              <h4 className="text-sm font-bold text-[var(--rzp-text)]">Ready to resolve detected buyer frictions?</h4>
               <p className="text-xs text-[var(--rzp-text-muted)] mt-0.5">
                 Review actionable recommendations and simulate price or delivery changes with the What-If tool.
               </p>
             </div>
             <Link to="/optimization">
-              <Button variant="ai" size="sm" className="whitespace-nowrap">
+              <Button variant="ai" size="sm" className="whitespace-nowrap shadow-sm font-semibold">
                 Review & Optimize <ArrowRight className="h-4 w-4 ml-1.5" />
               </Button>
             </Link>

@@ -117,9 +117,18 @@ class SimulationEngine:
                 f"with score {best['score']:.3f} (ranked #1 of {len(catalogue)} evaluated items)."
             )
         else:
+            dominant_friction = "constraint friction"
+            if all_evaluated_rankings:
+                from collections import Counter
+                all_frictions = []
+                for r in all_evaluated_rankings:
+                    all_frictions.extend(r.get("frictions", []))
+                if all_frictions:
+                    dominant_friction = Counter(all_frictions).most_common(1)[0][0]
+                    
             explanation = (
-                f"SIMULATED: {persona_name} rejected all {len(catalogue)} products due to constraint friction "
-                f"(budget limits, missing requirements, or stock availability)."
+                f"SIMULATED: {persona_name} rejected all {len(catalogue)} products. "
+                f"Dominant reason: {dominant_friction}."
             )
             reason_codes.append("NO_MATCHING_PRODUCTS")
 

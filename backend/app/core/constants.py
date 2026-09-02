@@ -90,3 +90,11 @@ class RecommendationStatus(str, Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     APPLIED = "APPLIED"
+
+
+class CampaignStatus(str, Enum):
+    PROPOSED = "PROPOSED"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+    PAUSED = "PAUSED"
+    ENDED = "ENDED"

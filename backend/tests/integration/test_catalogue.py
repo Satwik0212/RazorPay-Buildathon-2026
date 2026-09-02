@@ -69,3 +69,73 @@ def test_catalogue_search_and_intent_integration(client):
     # boAt Rockerz is under ₹2,000, so it should rank top
     assert search_results[0]["name"] == "boAt Rockerz 450"
     assert "budget_compliant" in search_results[0]["matched_constraints"]
+
+
+def test_merchant_read_isolation_and_soft_delete(client):
+    # Register merchant A
+    merchant_a = client.post("/api/v1/auth/register", json={"email": f"a_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    headers_a = {"Authorization": f"Bearer {merchant_a['access_token']}"}
+
+    # Register merchant B
+    merchant_b = client.post("/api/v1/auth/register", json={"email": f"b_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    headers_b = {"Authorization": f"Bearer {merchant_b['access_token']}"}
+
+    # Merchant A creates a product
+    prod_a = client.post("/api/v1/products", json={"name": "Product A", "category": "cat", "price": 100, "currency": "INR", "metadata": {}}, headers=headers_a).json()
+
+    # Merchant B creates a product
+    prod_b = client.post("/api/v1/products", json={"name": "Product B", "category": "cat", "price": 200, "currency": "INR", "metadata": {}}, headers=headers_b).json()
+
+    # GET /products as Merchant A should only return Product A
+    res_a = client.get("/api/v1/products", headers=headers_a).json()
+    assert len(res_a["items"]) == 1
+    assert res_a["items"][0]["id"] == prod_a["id"]
+
+    # GET /products as Merchant B should only return Product B
+    res_b = client.get("/api/v1/products", headers=headers_b).json()
+    assert len(res_b["items"]) == 1
+    assert res_b["items"][0]["id"] == prod_b["id"]
+
+    # GET /products/{id} as Merchant B for Product A should fail
+    get_fail = client.get(f"/api/v1/products/{prod_a['id']}", headers=headers_b)
+    assert get_fail.status_code == 403
+
+    # Soft Delete Product A
+    client.delete(f"/api/v1/products/{prod_a['id']}", headers=headers_a)
+
+    # GET /products as Merchant A with is_active=True (default) should be empty
+    res_a_active = client.get("/api/v1/products", headers=headers_a).json()
+    assert len(res_a_active["items"]) == 0
+
+    # GET /products as Merchant A with is_active=False should return Product A
+    res_a_inactive = client.get("/api/v1/products?is_active=false", headers=headers_a).json()
+    assert len(res_a_inactive["items"]) == 1
+    assert res_a_inactive["items"][0]["id"] == prod_a["id"]
+    assert res_a_inactive["items"][0]["is_active"] is False
+
+    # Reactivate Product A
+    client.patch(f"/api/v1/products/{prod_a['id']}/reactivate", headers=headers_a)
+    res_a_reactivated = client.get(f"/api/v1/products/{prod_a['id']}", headers=headers_a).json()
+    assert res_a_reactivated["is_active"] is True
+
+
+def test_inventory_update(client):
+    merchant = client.post("/api/v1/auth/register", json={"email": f"inv_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    headers = {"Authorization": f"Bearer {merchant['access_token']}"}
+
+    prod = client.post("/api/v1/products", json={"name": "Inv Prod", "category": "cat", "price": 100, "currency": "INR", "metadata": {}, "initial_quantity": 10}, headers=headers).json()
+    
+    # Check initial inventory
+    inv = client.get(f"/api/v1/products/{prod['id']}/inventory", headers=headers).json()
+    assert inv["available_quantity"] == 10
+
+    # Update inventory
+    upd = client.patch(f"/api/v1/products/{prod['id']}/inventory", json={"available_quantity": 50}, headers=headers).json()
+    assert upd["available_quantity"] == 50
+
+    # Merchant B cannot update Merchant A's inventory
+    merchant_b = client.post("/api/v1/auth/register", json={"email": f"b_{uuid.uuid4().hex[:8]}@example.com", "password": "Password123!", "role": "MERCHANT"}).json()
+    headers_b = {"Authorization": f"Bearer {merchant_b['access_token']}"}
+    
+    fail = client.patch(f"/api/v1/products/{prod['id']}/inventory", json={"available_quantity": 100}, headers=headers_b)
+    assert fail.status_code == 403
