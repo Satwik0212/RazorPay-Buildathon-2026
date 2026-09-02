@@ -29,7 +29,7 @@ export const Campaigns = () => {
       
       const [campRes, prodRes] = await Promise.all([
         campaignsApi.listCampaigns().catch(() => ({ data: [] })),
-        productsApi.getProducts().catch(() => ({ data: { items: [] } })),
+        productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
       ]);
 
       setCampaigns(campRes.data || []);

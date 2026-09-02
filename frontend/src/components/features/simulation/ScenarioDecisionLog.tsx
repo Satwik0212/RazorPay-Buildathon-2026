@@ -30,14 +30,14 @@ import {
 
 interface ScenarioDecisionLogProps {
   item: SimulationResultItem;
-  index: number;
+  index?: number;
   productsMap: Record<string, Product>;
   isExpandedDefault?: boolean;
 }
 
 export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
   item,
-  index,
+  index = 0,
   productsMap,
   isExpandedDefault = false,
 }) => {
@@ -46,13 +46,20 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
   const personaMeta = getPersonaMeta(item.persona_name);
   const intentSummary = extractIntentSummary(item);
   const selectedProduct = item.selected_product_id ? productsMap[item.selected_product_id] : null;
+  const winnerRanking =
+    (item.rankings || []).find((r) => r.product_id === item.selected_product_id) ||
+    (item.rankings || [])[0];
+  const winnerName =
+    selectedProduct?.name ||
+    winnerRanking?.product_name ||
+    (item.selected_product_id ? `Product (${item.selected_product_id.slice(0, 8)})` : 'Selected Product');
 
   const hardConstraints = evaluateHardConstraints(item, intentSummary, selectedProduct);
   const scoreComponents = calculateScoreComponents(item, intentSummary, selectedProduct);
   const positiveSignals = getPositiveSignals(item, intentSummary, selectedProduct);
   const frictionSignals = getFrictionSignals(item, intentSummary);
 
-  const isMatched = item.constraints_satisfied && !!selectedProduct;
+  const isMatched = Boolean(item.constraints_satisfied && item.selected_product_id);
 
   // Filter rankings into passed and disqualified
   const passedRankings = (item.rankings || []).filter((r) => r.passed !== false);
@@ -74,7 +81,7 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
         {/* Left: Persona & Outcome */}
         <div className="flex items-center space-x-3 flex-wrap gap-y-2">
           <span className="text-xs font-mono font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
-            #{index + 1}
+            #{index !== undefined ? index + 1 : 1}
           </span>
 
           <span
@@ -91,9 +98,9 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
           {/* Product Match Title */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-[var(--rzp-text)]">
-              {isMatched ? selectedProduct?.name : 'All Products Disqualified'}
+              {isMatched ? winnerName : 'All Products Disqualified'}
             </span>
-            {isMatched && selectedProduct && (
+            {isMatched && selectedProduct?.price !== undefined && selectedProduct?.price !== null && (
               <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
                 ({formatPrice(selectedProduct.price)})
               </span>
@@ -262,7 +269,8 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
                   <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                     {passedRankings.map((r) => {
                       const p = productsMap[r.product_id];
-                      const isWinner = r.rank === 1 && isMatched;
+                      const isWinner =
+                        (r.rank === 1 || r.product_id === item.selected_product_id) && isMatched;
                       return (
                         <div
                           key={r.product_id}
@@ -283,7 +291,9 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
                             <span className="truncate">{p ? p.name : r.product_name || r.product_id}</span>
                           </div>
                           <div className="flex items-center space-x-2">
-                            {p && <span className="text-[11px] text-gray-500">{formatPrice(p.price)}</span>}
+                            {p?.price !== undefined && p.price !== null && (
+                              <span className="text-[11px] text-gray-500">{formatPrice(p.price)}</span>
+                            )}
                             <span className="font-mono font-bold text-[var(--rzp-primary)]">
                               {(r.score * 100).toFixed(0)}%
                             </span>
@@ -346,7 +356,7 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
               <span className="text-[11px] text-[var(--rzp-text-muted)]">Engine Selection</span>
             </div>
 
-            {isMatched && selectedProduct ? (
+            {isMatched ? (
               <div className="p-3.5 bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/40 rounded-lg border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-base shrink-0">
@@ -356,9 +366,16 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
                       Top Selected Match
                     </span>
-                    <h3 className="font-bold text-sm text-[var(--rzp-text)]">{selectedProduct.name}</h3>
+                    <h3 className="font-bold text-sm text-[var(--rzp-text)]">{winnerName}</h3>
                     <p className="text-xs text-[var(--rzp-text-muted)]">
-                      Category: {selectedProduct.category} • Price: <strong>{formatPrice(selectedProduct.price)}</strong>
+                      {selectedProduct?.category
+                        ? `Category: ${selectedProduct.category}`
+                        : intentSummary.category
+                        ? `Category: ${intentSummary.category}`
+                        : 'Catalogue Item'}
+                      {selectedProduct?.price !== undefined && selectedProduct?.price !== null && (
+                        <> • Price: <strong>{formatPrice(selectedProduct.price)}</strong></>
+                      )}
                     </p>
                   </div>
                 </div>

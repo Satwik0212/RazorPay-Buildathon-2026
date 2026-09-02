@@ -53,7 +53,16 @@ export interface FrictionSignal {
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
-export const formatPrice = (priceInMinor: number): string => {
+export const formatPrice = (priceInMinor?: number | null): string => {
+  if (
+    priceInMinor === undefined ||
+    priceInMinor === null ||
+    typeof priceInMinor !== 'number' ||
+    isNaN(priceInMinor) ||
+    !isFinite(priceInMinor)
+  ) {
+    return '₹0';
+  }
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -184,27 +193,50 @@ export const evaluateHardConstraints = (
   selectedProduct?: Product | null
 ): ConstraintCheck[] => {
   const checks: ConstraintCheck[] = [];
-  const hardFrictions = (item.frictions || []).filter((f) => f.type === 'HARD_CONSTRAINT' || (f.reason && ['PRICE_MISMATCH', 'INVENTORY_ISSUE', 'MISSING_FEATURE', 'DELIVERY_TOO_SLOW', 'DELIVERY_UNKNOWN'].includes(f.reason)));
-  const isSatisfied = item.constraints_satisfied && !!selectedProduct;
+  const hardFrictions = (item.frictions || []).filter(
+    (f) =>
+      f.type === 'HARD_CONSTRAINT' ||
+      (f.reason &&
+        [
+          'PRICE_MISMATCH',
+          'INVENTORY_ISSUE',
+          'MISSING_FEATURE',
+          'DELIVERY_TOO_SLOW',
+          'DELIVERY_UNKNOWN',
+        ].includes(f.reason))
+  );
+  const isSatisfied = Boolean(item.constraints_satisfied && item.selected_product_id);
 
   // 1. Budget Cap
   if (intent.maxBudget !== null) {
     const hasPriceMismatch = hardFrictions.some((f) => f.reason === 'PRICE_MISMATCH');
-    if (selectedProduct) {
+    if (selectedProduct && selectedProduct.price !== undefined && selectedProduct.price !== null) {
       const priceFits = selectedProduct.price <= intent.maxBudget;
       checks.push({
         id: 'budget_cap',
         name: 'Budget Ceiling',
         status: priceFits ? 'PASSED' : 'FAILED',
-        summary: priceFits ? `Within Budget (${formatPrice(selectedProduct.price)} ≤ ${formatPrice(intent.maxBudget)})` : `Exceeds Budget (${formatPrice(selectedProduct.price)} > ${formatPrice(intent.maxBudget)})`,
+        summary: priceFits
+          ? `Within Budget (${formatPrice(selectedProduct.price)} ≤ ${formatPrice(intent.maxBudget)})`
+          : `Exceeds Budget (${formatPrice(selectedProduct.price)} > ${formatPrice(intent.maxBudget)})`,
         evidence: `Max budget constraint: ${formatPrice(intent.maxBudget)}. Selected item price: ${formatPrice(selectedProduct.price)}.`,
+      });
+    } else if (isSatisfied && !hasPriceMismatch) {
+      checks.push({
+        id: 'budget_cap',
+        name: 'Budget Ceiling',
+        status: 'PASSED',
+        summary: `Within Budget Constraint (≤ ${formatPrice(intent.maxBudget)})`,
+        evidence: `Max budget ceiling: ${formatPrice(intent.maxBudget)}. Satisfied by candidate selection.`,
       });
     } else {
       checks.push({
         id: 'budget_cap',
         name: 'Budget Ceiling',
         status: hasPriceMismatch ? 'FAILED' : 'PASSED',
-        summary: hasPriceMismatch ? `Disqualified: Catalogue items exceed budget cap of ${formatPrice(intent.maxBudget)}` : `Budget cap set at ${formatPrice(intent.maxBudget)}`,
+        summary: hasPriceMismatch
+          ? `Disqualified: Catalogue items exceed budget cap of ${formatPrice(intent.maxBudget)}`
+          : `Budget cap set at ${formatPrice(intent.maxBudget)}`,
         evidence: `Evaluated budget limit of ${formatPrice(intent.maxBudget)}.`,
       });
     }
@@ -221,20 +253,35 @@ export const evaluateHardConstraints = (
   // 2. Active Stock & Inventory
   const hasInventoryFriction = hardFrictions.some((f) => f.reason === 'INVENTORY_ISSUE');
   if (selectedProduct) {
-    const inStock = selectedProduct.is_active && (selectedProduct.inventory?.available_quantity === undefined || selectedProduct.inventory.available_quantity > 0);
+    const inStock =
+      selectedProduct.is_active &&
+      (selectedProduct.inventory?.available_quantity === undefined ||
+        selectedProduct.inventory.available_quantity > 0);
     checks.push({
       id: 'inventory_status',
       name: 'Catalogue Stock Availability',
       status: inStock ? 'PASSED' : 'FAILED',
-      summary: inStock ? 'Verified active and available in stock' : 'Product is inactive or stock is depleted',
+      summary: inStock
+        ? 'Verified active and available in stock'
+        : 'Product is inactive or stock is depleted',
       evidence: `Product active status: ${selectedProduct.is_active}. Available stock: ${selectedProduct.inventory?.available_quantity ?? 'Available'}.`,
+    });
+  } else if (isSatisfied && !hasInventoryFriction) {
+    checks.push({
+      id: 'inventory_status',
+      name: 'Catalogue Stock Availability',
+      status: 'PASSED',
+      summary: 'Verified active and available in stock',
+      evidence: 'Selected candidate verified active with available inventory.',
     });
   } else {
     checks.push({
       id: 'inventory_status',
       name: 'Catalogue Stock Availability',
       status: hasInventoryFriction ? 'FAILED' : 'PASSED',
-      summary: hasInventoryFriction ? 'Disqualified: Active stock unavailable' : 'Active inventory verified across candidates',
+      summary: hasInventoryFriction
+        ? 'Disqualified: Active stock unavailable'
+        : 'Active inventory verified across candidates',
       evidence: 'Requires active catalogue state and positive inventory quantity.',
     });
   }
@@ -243,23 +290,16 @@ export const evaluateHardConstraints = (
   if (intent.requirements && intent.requirements.length > 0) {
     const reqNames = intent.requirements.join(', ');
     const hasMissingFeature = hardFrictions.some((f) => f.reason === 'MISSING_FEATURE');
-    if (selectedProduct) {
-      checks.push({
-        id: 'mandatory_features',
-        name: 'Mandatory Specification Requirements',
-        status: isSatisfied && !hasMissingFeature ? 'PASSED' : 'FAILED',
-        summary: isSatisfied && !hasMissingFeature ? `Confirmed required specifications: ${reqNames}` : `Missing required specification: ${reqNames}`,
-        evidence: `Intent required: ${reqNames}. Verified in product metadata and descriptive specifications.`,
-      });
-    } else {
-      checks.push({
-        id: 'mandatory_features',
-        name: 'Mandatory Specification Requirements',
-        status: hasMissingFeature ? 'FAILED' : 'PASSED',
-        summary: hasMissingFeature ? `Disqualified: Required feature (${reqNames}) not verified` : `Required feature: ${reqNames}`,
-        evidence: `Mandatory feature validation for [${reqNames}].`,
-      });
-    }
+    checks.push({
+      id: 'mandatory_features',
+      name: 'Mandatory Specification Requirements',
+      status: isSatisfied && !hasMissingFeature ? 'PASSED' : 'FAILED',
+      summary:
+        isSatisfied && !hasMissingFeature
+          ? `Confirmed required specifications: ${reqNames}`
+          : `Missing required specification: ${reqNames}`,
+      evidence: `Intent required: ${reqNames}. Verified in product specifications.`,
+    });
   } else {
     checks.push({
       id: 'mandatory_features',
@@ -272,23 +312,40 @@ export const evaluateHardConstraints = (
 
   // 4. Delivery Deadline
   if (intent.deliveryDeadlineDays !== null) {
-    const hasDeliverySlow = hardFrictions.some((f) => f.reason === 'DELIVERY_TOO_SLOW' || f.reason === 'DELIVERY_UNKNOWN');
-    if (selectedProduct) {
-      const deliveryDays = selectedProduct.metadata?.delivery_days;
-      const passesDeadline = deliveryDays !== undefined && deliveryDays !== null && Number(deliveryDays) <= intent.deliveryDeadlineDays;
+    const hasDeliverySlow = hardFrictions.some(
+      (f) => f.reason === 'DELIVERY_TOO_SLOW' || f.reason === 'DELIVERY_UNKNOWN'
+    );
+    if (
+      selectedProduct?.metadata?.delivery_days !== undefined &&
+      selectedProduct.metadata.delivery_days !== null
+    ) {
+      const deliveryDays = Number(selectedProduct.metadata.delivery_days);
+      const passesDeadline = deliveryDays <= intent.deliveryDeadlineDays;
       checks.push({
         id: 'delivery_deadline',
         name: 'Delivery Speed Deadline',
         status: passesDeadline ? 'PASSED' : 'FAILED',
-        summary: passesDeadline ? `Meets delivery promise (${deliveryDays} day${Number(deliveryDays) === 1 ? '' : 's'} ≤ ${intent.deliveryDeadlineDays} days)` : `Fails delivery promise (${deliveryDays ?? 'Unknown'} days > ${intent.deliveryDeadlineDays} days)`,
-        evidence: `Required arrival within ≤ ${intent.deliveryDeadlineDays} days. Product delivery time: ${deliveryDays ?? 'Unspecified'} days.`,
+        summary: passesDeadline
+          ? `Meets delivery promise (${deliveryDays} day${deliveryDays === 1 ? '' : 's'} ≤ ${intent.deliveryDeadlineDays} days)`
+          : `Fails delivery promise (${deliveryDays} days > ${intent.deliveryDeadlineDays} days)`,
+        evidence: `Required arrival within ≤ ${intent.deliveryDeadlineDays} days. Product delivery time: ${deliveryDays} days.`,
+      });
+    } else if (isSatisfied && !hasDeliverySlow) {
+      checks.push({
+        id: 'delivery_deadline',
+        name: 'Delivery Speed Deadline',
+        status: 'PASSED',
+        summary: `Meets delivery promise (≤ ${intent.deliveryDeadlineDays} day${intent.deliveryDeadlineDays === 1 ? '' : 's'})`,
+        evidence: `Required arrival within ≤ ${intent.deliveryDeadlineDays} days. Delivery timeline verified by engine.`,
       });
     } else {
       checks.push({
         id: 'delivery_deadline',
         name: 'Delivery Speed Deadline',
         status: hasDeliverySlow ? 'FAILED' : 'PASSED',
-        summary: hasDeliverySlow ? `Disqualified: Estimated delivery exceeds deadline (≤ ${intent.deliveryDeadlineDays} days)` : `Delivery deadline requirement: ≤ ${intent.deliveryDeadlineDays} days`,
+        summary: hasDeliverySlow
+          ? `Disqualified: Estimated delivery exceeds deadline (≤ ${intent.deliveryDeadlineDays} days)`
+          : `Delivery deadline requirement: ≤ ${intent.deliveryDeadlineDays} days`,
         evidence: `Strict delivery timeline filter for ${intent.deliveryDeadlineDays} day deadline.`,
       });
     }
@@ -450,63 +507,94 @@ export const getPositiveSignals = (
   product?: Product | null
 ): PositiveSignal[] => {
   const signals: PositiveSignal[] = [];
-  if (!product || !item.constraints_satisfied) return signals;
+  const isSatisfied = Boolean(item.constraints_satisfied && item.selected_product_id);
+  if (!isSatisfied) return signals;
 
-  const metadata = product.metadata || {};
+  if (product) {
+    const metadata = product.metadata || {};
 
-  // Inventory
-  if (product.is_active) {
-    const qty = product.inventory?.available_quantity;
+    // Inventory
+    if (product.is_active) {
+      const qty = product.inventory?.available_quantity;
+      signals.push({
+        title: 'Active In-Stock Inventory',
+        description:
+          qty !== undefined && qty !== null
+            ? `Verified active status with ${qty} units in stock`
+            : 'Catalogue item is active and ready for simulated checkout',
+        category: 'INVENTORY',
+      });
+    }
+
+    // Budget
+    if (
+      intent.maxBudget &&
+      product.price !== undefined &&
+      product.price !== null &&
+      product.price <= intent.maxBudget
+    ) {
+      const savings = intent.maxBudget - product.price;
+      signals.push({
+        title: 'Price Within Target Budget',
+        description: `${formatPrice(product.price)} is within the ${formatPrice(intent.maxBudget)} ceiling${savings > 0 ? ` (${formatPrice(savings)} headroom)` : ''}`,
+        category: 'BUDGET',
+      });
+    }
+
+    // Delivery
+    if (
+      metadata.delivery_days !== undefined &&
+      metadata.delivery_days !== null &&
+      Number(metadata.delivery_days) <= 3
+    ) {
+      signals.push({
+        title: 'Fast Delivery Promise',
+        description: `Dispatched quickly with estimated delivery in ${metadata.delivery_days} day${Number(metadata.delivery_days) === 1 ? '' : 's'}`,
+        category: 'DELIVERY',
+      });
+    }
+
+    // Rating
+    if (
+      metadata.rating !== undefined &&
+      metadata.rating !== null &&
+      Number(metadata.rating) >= 4.0
+    ) {
+      signals.push({
+        title: 'Strong Customer Rating',
+        description: `Verified high customer satisfaction rating of ${metadata.rating} / 5.0 stars`,
+        category: 'QUALITY',
+      });
+    }
+
+    // Warranty
+    if (metadata.warranty) {
+      signals.push({
+        title: 'Warranty Protection Included',
+        description: 'Manufacturer warranty verified in catalogue metadata',
+        category: 'QUALITY',
+      });
+    }
+
+    // Returns
+    if (
+      metadata.return_days !== undefined &&
+      metadata.return_days !== null &&
+      Number(metadata.return_days) >= 7
+    ) {
+      signals.push({
+        title: 'Generous Return Policy',
+        description: `${metadata.return_days}-day return window provides strong buyer confidence`,
+        category: 'RETURNS',
+      });
+    }
+  } else {
+    // When product details are not in client cache, provide truthful signals from simulation outcome
     signals.push({
-      title: 'Active In-Stock Inventory',
-      description: qty !== undefined && qty !== null ? `Verified active status with ${qty} units in stock` : 'Catalogue item is active and ready for simulated checkout',
-      category: 'INVENTORY',
-    });
-  }
-
-  // Budget
-  if (intent.maxBudget && product.price <= intent.maxBudget) {
-    const savings = intent.maxBudget - product.price;
-    signals.push({
-      title: 'Price Within Target Budget',
-      description: `${formatPrice(product.price)} is within the ${formatPrice(intent.maxBudget)} ceiling${savings > 0 ? ` (${formatPrice(savings)} headroom)` : ''}`,
+      title: 'Hard Constraints Satisfied',
+      description:
+        'Candidate item passed all hard budget, inventory, and specification gatekeeper checks.',
       category: 'BUDGET',
-    });
-  }
-
-  // Delivery
-  if (metadata.delivery_days !== undefined && Number(metadata.delivery_days) <= 3) {
-    signals.push({
-      title: 'Fast Delivery Promise',
-      description: `Dispatched quickly with estimated delivery in ${metadata.delivery_days} day${Number(metadata.delivery_days) === 1 ? '' : 's'}`,
-      category: 'DELIVERY',
-    });
-  }
-
-  // Rating
-  if (metadata.rating !== undefined && Number(metadata.rating) >= 4.0) {
-    signals.push({
-      title: 'Strong Customer Rating',
-      description: `Verified high customer satisfaction rating of ${metadata.rating} / 5.0 stars`,
-      category: 'QUALITY',
-    });
-  }
-
-  // Warranty
-  if (metadata.warranty) {
-    signals.push({
-      title: 'Warranty Protection Included',
-      description: 'Manufacturer warranty verified in catalogue metadata',
-      category: 'QUALITY',
-    });
-  }
-
-  // Returns
-  if (metadata.return_days !== undefined && Number(metadata.return_days) >= 7) {
-    signals.push({
-      title: 'Generous Return Policy',
-      description: `${metadata.return_days}-day return window provides strong buyer confidence`,
-      category: 'RETURNS',
     });
   }
 

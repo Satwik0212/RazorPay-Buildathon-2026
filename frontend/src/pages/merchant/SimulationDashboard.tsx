@@ -8,13 +8,10 @@ import {
   ShieldAlert,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
   Sparkles,
   ArrowRight,
   Filter,
   Sliders,
-  ChevronDown,
-  ChevronUp,
   Lightbulb,
   Scale,
   TrendingUp,
@@ -26,7 +23,8 @@ import { personasApi } from '../../api/personas';
 import { productsApi } from '../../api/products';
 import { authApi } from '../../api/auth';
 import type { BuyerPersona, Product, SimulationResponse } from '../../types';
-import { RecommendationPipelineHeader, type PipelineStepId, formatPriceInINR } from '../../components/features/recommendations';
+import { RecommendationPipelineHeader, type PipelineStepId } from '../../components/features/recommendations';
+import { ScenarioDecisionLog } from '../../components/features/simulation';
 
 export const SimulationDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -44,7 +42,6 @@ export const SimulationDashboard: React.FC = () => {
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [scenarioCount, setScenarioCount] = useState<number>(10);
   const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   // Restore previous run or baseline from sessionStorage
   useEffect(() => {
@@ -90,7 +87,7 @@ export const SimulationDashboard: React.FC = () => {
       try {
         const [personaRes, productRes] = await Promise.all([
           personasApi.getPersonas().catch(() => ({ data: [] })),
-          productsApi.getProducts().catch(() => ({ data: { items: [] } })),
+          productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
         ]);
 
         if (personaRes.data && personaRes.data.length > 0) {
@@ -576,117 +573,16 @@ export const SimulationDashboard: React.FC = () => {
                 </Link>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {results.results.map((item, idx) => {
-                    const isExpanded = expandedRow === idx;
-                    const matchedProduct = item.selected_product_id ? productsMap[item.selected_product_id] : null;
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`border rounded-lg p-4 transition-all ${
-                          item.constraints_satisfied
-                            ? 'border-[var(--rzp-border)] bg-white hover:border-gray-300'
-                            : 'border-red-200 bg-red-50/20'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-xs font-bold text-gray-400 font-mono">#{idx + 1}</span>
-                            <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-[var(--rzp-ai-soft)] text-[var(--rzp-ai)]">
-                              {item.persona_name}
-                            </span>
-                            <span className="text-sm font-semibold text-[var(--rzp-text)]">
-                              {matchedProduct ? matchedProduct.name : 'No Product Matched'}
-                            </span>
-                            {matchedProduct && (
-                              <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
-                                ({formatPriceInINR(matchedProduct.price)})
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center space-x-3">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex items-center ${
-                              item.constraints_satisfied
-                                ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)]'
-                                : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)]'
-                            }`}>
-                              {item.constraints_satisfied ? (
-                                <>
-                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Match Score: {(item.score * 100).toFixed(0)}%
-                                </>
-                              ) : (
-                                <>
-                                  <XCircle className="h-3.5 w-3.5 mr-1" /> Rejection
-                                </>
-                              )}
-                            </span>
-
-                            <button
-                              type="button"
-                              onClick={() => setExpandedRow(isExpanded ? null : idx)}
-                              className="p-1 hover:bg-gray-100 rounded text-gray-500"
-                            >
-                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Explanation String */}
-                        <p className="text-xs text-[var(--rzp-text-secondary)] mt-2">
-                          {item.explanation}
-                        </p>
-
-                        {/* Reason Codes */}
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {item.reason_codes.map(code => (
-                            <span key={code} className="text-[11px] font-mono bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
-                              {code}
-                            </span>
-                          ))}
-                        </div>
-
-                        {/* Expanded Details */}
-                        {isExpanded && (
-                          <div className="mt-4 pt-3 border-t border-dashed border-gray-200 text-xs space-y-3">
-                            {item.frictions && item.frictions.length > 0 && (
-                              <div>
-                                <span className="font-semibold text-red-700 block mb-1">Detected Frictions:</span>
-                                <div className="space-y-1">
-                                  {item.frictions.map((f, fIdx) => (
-                                    <div key={fIdx} className="p-2 bg-red-50 text-red-800 rounded flex justify-between">
-                                      <span>{f.description || f.reason}</span>
-                                      <span className="font-bold">{f.severity || 'WARN'}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {item.rankings && item.rankings.length > 0 && (
-                              <div>
-                                <span className="font-semibold text-gray-700 block mb-1">Candidate Product Rankings:</span>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {item.rankings.map(r => {
-                                    const p = productsMap[r.product_id];
-                                    return (
-                                      <div key={r.product_id} className="p-2 bg-gray-50 rounded border flex justify-between items-center">
-                                        <span className="truncate max-w-[200px]">{p ? p.name : r.product_id}</span>
-                                        <span className="font-mono font-bold text-[var(--rzp-primary)]">
-                                          Rank #{r.rank} (Score: {r.score})
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="space-y-4">
+                  {results.results.map((item, idx) => (
+                    <ScenarioDecisionLog
+                      key={`${item.persona_name}-${idx}`}
+                      item={item}
+                      index={idx}
+                      productsMap={productsMap}
+                      isExpandedDefault={idx === 0}
+                    />
+                  ))}
                 </div>
               </CardContent>
             </Card>

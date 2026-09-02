@@ -97,7 +97,7 @@ export const Optimization: React.FC = () => {
     try {
       const [merchantId, prodRes] = await Promise.all([
         authApi.getOrInitMerchantId(),
-        productsApi.getProducts().catch(() => ({ data: { items: [] } })),
+        productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
       ]);
 
       const items = prodRes.data.items || [];
@@ -196,7 +196,7 @@ export const Optimization: React.FC = () => {
 
       // If a recommendation was applied, refresh products to get the mutated DB state
       if (status === 'APPLIED') {
-        const prodRes = await productsApi.getProducts().catch(() => null);
+        const prodRes = await productsApi.getProducts({ limit: 100 }).catch(() => null);
         if (prodRes?.data?.items) {
           setProducts(prodRes.data.items);
         }
