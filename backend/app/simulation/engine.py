@@ -76,8 +76,10 @@ class SimulationEngine:
                 "product": product,
             })
 
-        # Sort candidates descending by score
-        candidates.sort(key=lambda x: x["score"], reverse=True)
+        # Sort candidates descending by score with deterministic tie-breaking
+        candidates.sort(
+            key=lambda x: (-x["score"], str(x["product_id"]))
+        )
 
         rankings = []
         for i, c in enumerate(candidates):

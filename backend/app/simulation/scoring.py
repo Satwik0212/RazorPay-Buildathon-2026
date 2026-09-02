@@ -144,4 +144,4 @@ class ProductScorer:
             (metadata_score * w_metadata)
         ) / total_w
 
-        return round(min(max(raw_score, 0.0), 1.0), 3)
+        return min(max(raw_score, 0.0), 1.0)

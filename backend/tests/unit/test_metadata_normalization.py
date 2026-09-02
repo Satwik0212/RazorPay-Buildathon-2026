@@ -154,5 +154,5 @@ def test_metadata_density_not_inflated_by_aliases():
 
     # Raw meta count is 1. meta_score = min(0.6, (1 / 15.0) * 0.6) = 0.04
     # desc_score = min(0.4, (17 / 500.0) * 0.4) = 0.0136
-    # Total expected score = round(0.04 + 0.0136, 3) = 0.054
-    assert score == 0.054
+    # Total expected score = 0.04 + 0.0136 = 0.0536 (unquantized float precision in Step 2)
+    assert score == pytest.approx(0.0536, abs=1e-5)
