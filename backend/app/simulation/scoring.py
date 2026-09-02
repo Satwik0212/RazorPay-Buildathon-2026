@@ -18,7 +18,8 @@ class ProductScorer:
         Deterministically calculate a product score based on persona weights.
         All normalized feature scores are in range [0.0, 1.0].
         """
-        metadata = product.get("product_metadata") or product.get("metadata") or {}
+        from app.simulation.normalization import MetadataNormalizer
+        metadata = MetadataNormalizer.normalize(product)
         price = product.get("price", 0)
 
         # Normalize weight keys early (handling aliases)
@@ -128,7 +129,8 @@ class ProductScorer:
         desc_length = len(product.get("description") or "")
         # Scale: 500 chars = 0.4 (max)
         desc_score = min(0.4, (desc_length / 500.0) * 0.4) 
-        meta_count = len(metadata)
+        raw_meta = product.get("product_metadata") or product.get("metadata") or {}
+        meta_count = len(raw_meta)
         # Scale: 15 keys = 0.6 (max)
         meta_score = min(0.6, (meta_count / 15.0) * 0.6)   
         metadata_score = desc_score + meta_score

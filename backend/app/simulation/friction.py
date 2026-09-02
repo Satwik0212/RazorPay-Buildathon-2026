@@ -29,7 +29,8 @@ class FrictionDetector:
         """
         reasons: List[FrictionReason] = []
         price = product.get("price", 0)
-        metadata = product.get("product_metadata") or product.get("metadata") or {}
+        from app.simulation.normalization import MetadataNormalizer
+        metadata = MetadataNormalizer.normalize(product)
 
         # 1. Budget hard limit check
         max_budget = intent.get("max_budget")
@@ -89,7 +90,8 @@ class FrictionDetector:
         Soft friction evaluation: Identifies attributes that reduce buyer confidence or score.
         """
         reasons: List[FrictionReason] = []
-        metadata = product.get("product_metadata") or product.get("metadata") or {}
+        from app.simulation.normalization import MetadataNormalizer
+        metadata = MetadataNormalizer.normalize(product)
         w_delivery = persona_weights.get("delivery", persona_weights.get("speed", 0.0))
         w_returns = persona_weights.get("returns", persona_weights.get("return_policy", 0.0))
         w_metadata = persona_weights.get("metadata", persona_weights.get("specifications", 0.0))
@@ -104,7 +106,8 @@ class FrictionDetector:
 
         # Incomplete product information
         desc = product.get("description") or ""
-        if len(desc.strip()) < 15 or (w_metadata >= 0.20 and len(metadata) < 2):
+        raw_meta = product.get("product_metadata") or product.get("metadata") or {}
+        if len(desc.strip()) < 15 or (w_metadata >= 0.20 and len(raw_meta) < 2):
             reasons.append(FrictionReason.INSUFFICIENT_PRODUCT_INFORMATION)
 
         return list(set(reasons))
