@@ -37,10 +37,15 @@ def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db))
     Grounded in real database products.
     """
     service = ProductService(db)
+
+    # P0-1 FIX: LLM returns budget in rupees; DB stores prices in paise.
+    # Convert rupees → paise so budget comparisons are correct.
+    max_price_paise = req.max_budget * 100 if req.max_budget is not None else None
+
     # Fetch active products matching category and/or budget constraints
     products, _ = service.list_products(
         category=req.category,
-        max_price=req.max_budget,
+        max_price=max_price_paise,
         is_active=True,
         limit=50,
     )
@@ -49,7 +54,7 @@ def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db))
         # Resilient fallback: search across product name / corpus if exact category mismatch
         products, _ = service.list_products(
             search=req.category,
-            max_price=req.max_budget,
+            max_price=max_price_paise,
             is_active=True,
             limit=50,
         )
@@ -71,11 +76,11 @@ def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db))
         else:
             score_components.append(0.30)
 
-        # 2. Budget check
-        if req.max_budget is not None:
-            if p.price <= req.max_budget:
+        # 2. Budget check (compare in paise)
+        if max_price_paise is not None:
+            if p.price <= max_price_paise:
                 matched_constraints.append("budget_compliant")
-                budget_ratio = (req.max_budget - p.price) / max(req.max_budget, 1)
+                budget_ratio = (max_price_paise - p.price) / max(max_price_paise, 1)
                 score_components.append(0.20 + (0.10 * min(budget_ratio, 1.0)))
             else:
                 failed_constraints.append("exceeds_budget")
@@ -116,12 +121,23 @@ def search_catalogue(req: CatalogueSearchRequest, db: Session = Depends(get_db))
 
         total_match_score = round(sum(score_components), 3)
 
+        # P0-2 FIX: Populate id, merchant_id, description, metadata, inventory
+        # so the frontend can add this product to cart without a 422.
+        inventory_info = None
+        if hasattr(p, "inventory") and p.inventory:
+            inventory_info = {"available_quantity": p.inventory.available_quantity}
+
         results.append(
             SearchResultItem(
                 product_id=p.id,
+                id=p.id,  # frontend uses `id` for cart creation
+                merchant_id=p.merchant_id,
                 name=p.name,
                 price=p.price,
                 category=p.category,
+                description=p.description or "",
+                metadata=p_metadata if p_metadata else None,
+                inventory=inventory_info,
                 match_score=total_match_score,
                 matched_constraints=matched_constraints,
                 failed_constraints=failed_constraints,

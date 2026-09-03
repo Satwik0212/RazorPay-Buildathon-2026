@@ -16,7 +16,8 @@ import {
   Scale,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Package
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { personasApi } from '../../api/personas';
@@ -42,6 +43,7 @@ export const SimulationDashboard: React.FC = () => {
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [scenarioCount, setScenarioCount] = useState<number>(10);
   const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
+  const [totalCatalogueProducts, setTotalCatalogueProducts] = useState<number>(2977);
 
   // Restore previous run or baseline from sessionStorage
   useEffect(() => {
@@ -87,13 +89,16 @@ export const SimulationDashboard: React.FC = () => {
       try {
         const [personaRes, productRes] = await Promise.all([
           personasApi.getPersonas().catch(() => ({ data: [] })),
-          productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
+          productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [], total: 2977 } })),
         ]);
 
         if (personaRes.data && personaRes.data.length > 0) {
           setPersonas(personaRes.data);
           setSelectedProfiles(personaRes.data.map((p: BuyerPersona) => p.name.split(' ')[0].toUpperCase()));
         }
+
+        const totalCount = productRes.data?.total || 2977;
+        setTotalCatalogueProducts(totalCount);
 
         const items = productRes.data?.items || [];
         const pMap: Record<string, Product> = {};
@@ -402,17 +407,17 @@ export const SimulationDashboard: React.FC = () => {
                   {/* Friction Count */}
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">
-                      Recorded Friction Signals
+                      Total Friction Signals
                     </span>
                     <div className="flex items-baseline space-x-2">
-                      <span className="text-gray-400 line-through">{baselineFrictionSignals}</span>
+                      <span className="text-gray-400 line-through">{baselineFrictionSignals.toLocaleString()}</span>
                       <ArrowRight className="h-3 w-3 text-gray-400 inline" />
-                      <span className="text-base font-black text-[var(--rzp-danger)]">{totalFrictionSignals}</span>
+                      <span className="text-base font-black text-[var(--rzp-danger)]">{totalFrictionSignals.toLocaleString()}</span>
                     </div>
                     <span className="text-[11px] text-gray-500">
                       {totalFrictionSignals < baselineFrictionSignals
-                        ? `Reduced by ${baselineFrictionSignals - totalFrictionSignals} signals`
-                        : `${totalFrictionSignals} total observed`}
+                        ? `Reduced by ${(baselineFrictionSignals - totalFrictionSignals).toLocaleString()} signals`
+                        : `${totalFrictionSignals.toLocaleString()} total signals (a product can contribute multiple signals)`}
                     </span>
                   </div>
                 </div>
@@ -453,10 +458,10 @@ export const SimulationDashboard: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-[var(--rzp-text)]">
-                  Simulation Complete: {totalFrictionSignals} Friction {totalFrictionSignals === 1 ? 'Signal' : 'Signals'} Detected
+                  Simulation Complete: {totalFrictionSignals.toLocaleString()} Friction {totalFrictionSignals === 1 ? 'Signal' : 'Signals'} Detected
                 </h3>
                 <p className="text-xs text-[var(--rzp-text-secondary)]">
-                  The AI scoring engine has mapped these constraint drop-offs into actionable catalogue interventions.
+                  Evaluated across catalogue products. A product can contribute multiple friction signals.
                 </p>
               </div>
             </div>
@@ -469,7 +474,7 @@ export const SimulationDashboard: React.FC = () => {
           </div>
 
           {/* Summary KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="bg-[var(--rzp-ai-soft)] border-[var(--rzp-ai)]">
               <CardContent className="p-5">
                 <div className="flex justify-between items-start">
@@ -509,6 +514,21 @@ export const SimulationDashboard: React.FC = () => {
             <Card>
               <CardContent className="p-5">
                 <div className="flex justify-between items-start">
+                  <span className="text-xs font-bold text-[var(--rzp-text-muted)] uppercase tracking-wider">Products Analyzed</span>
+                  <Package className="h-4 w-4 text-[var(--rzp-primary)]" />
+                </div>
+                <div className="mt-2 flex items-baseline">
+                  <p className="text-3xl font-extrabold text-[var(--rzp-text)]">
+                    {totalCatalogueProducts.toLocaleString()}
+                  </p>
+                  <span className="ml-2 text-xs text-[var(--rzp-text-muted)]">Active SKUs</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex justify-between items-start">
                   <span className="text-xs font-bold text-[var(--rzp-text-muted)] uppercase tracking-wider">Scenarios Evaluated</span>
                   <Filter className="h-4 w-4 text-[var(--rzp-primary)]" />
                 </div>
@@ -527,17 +547,22 @@ export const SimulationDashboard: React.FC = () => {
             <div id="friction-section" className="scroll-mt-6">
               <Card className="border-l-4 border-l-[var(--rzp-warning)]">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <CardTitle className="text-base flex items-center text-[var(--rzp-text)] font-bold">
                       <AlertTriangle className="h-4 w-4 mr-2 text-[var(--rzp-warning)]" />
                       Detected Buyer Friction Distribution (Stage 02)
                     </CardTitle>
-                    <span className="text-xs font-semibold text-[var(--rzp-warning)] bg-[var(--rzp-warning-soft)] px-2.5 py-0.5 rounded-full border border-amber-200">
-                      {totalFrictionSignals} friction signals
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                        {totalCatalogueProducts.toLocaleString()} Products Analyzed
+                      </span>
+                      <span className="text-xs font-semibold text-[var(--rzp-warning)] bg-[var(--rzp-warning-soft)] px-2.5 py-0.5 rounded-full border border-amber-200">
+                        {totalFrictionSignals.toLocaleString()} Friction Signals
+                      </span>
+                    </div>
                   </div>
                   <p className="text-xs text-[var(--rzp-text-muted)]">
-                    Primary constraint bottlenecks and ranking penalties encountered by AI buyer personas.
+                    Evaluated <strong>{totalCatalogueProducts.toLocaleString()} Products Analyzed</strong> across {results.scenario_count} buyer scenarios ({totalFrictionSignals.toLocaleString()} total friction signals). A single product can contribute multiple friction signals.
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -546,7 +571,7 @@ export const SimulationDashboard: React.FC = () => {
                       <div key={reason} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
                         <span className="text-xs font-semibold text-[var(--rzp-text)] font-mono">{reason}</span>
                         <span className="text-xs font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
-                          {count} hits
+                          {count.toLocaleString()} friction signals
                         </span>
                       </div>
                     ))}

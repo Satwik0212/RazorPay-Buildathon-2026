@@ -133,28 +133,39 @@ class RecommendationService:
                 rec_type = "PRICE_COMPETITIVENESS"
                 title = "Adjust Price or Add Promotional Discount"
                 rec_reason = f"{total_frictions} simulated budget-conscious buyer drop-offs occurred because prices exceeded budget constraints across {unique_product_count} products."
+                # P0-5 FIX: Include new_price so Apply handler can mutate the product.
+                # Suggest a 10% price reduction as the concrete action.
                 action_data = {
-                    "suggested_change": "Review price positioning for budget-conscious buyer segments.",
+                    "suggested_change": "Apply a 10% price reduction to improve budget-conscious buyer match rates.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "PRICE_MISMATCH",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
+                    "price_reduction_percent": 10,
+                    # new_price will be computed per-product at apply time from price_reduction_percent.
+                    # We set a sentinel value of -1 to signal "compute 10% discount per product".
+                    "new_price_mode": "percent_discount",
+                    "new_price_discount_pct": 10,
                 }
 
             elif reason == FrictionReason.RETURN_UNCLEAR.value or reason == "RETURN_UNCLEAR":
                 rec_type = "RETURN_POLICY_CLARITY"
                 title = "Clarify Return & Refund Policy"
                 rec_reason = f"{total_frictions} simulated buyer drop-offs occurred due to unstated return terms across {unique_product_count} products."
+                # P0-5 FIX: Include new_return_days so Apply handler can mutate the product.
                 action_data = {
-                    "suggested_change": "Add a structured return policy.",
+                    "suggested_change": "Add a structured 14-day return policy to product metadata.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "RETURN_UNCLEAR",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
+                    "new_return_days": 14,
+                    "before_state_description": "Unknown / unstated",
+                    "after_state_description": "14 days",
                 }
 
             elif reason == FrictionReason.INSUFFICIENT_PRODUCT_INFORMATION.value or reason == "INSUFFICIENT_PRODUCT_INFORMATION":
@@ -175,14 +186,18 @@ class RecommendationService:
                 rec_type = "INVENTORY_RESTORATION"
                 title = "Restock or Reactivate Inactive Listings"
                 rec_reason = f"{total_frictions} simulated purchase blocks occurred due to out-of-stock inventory or deactivated listings across {unique_product_count} products."
+                # P0-5 FIX: Include new_inventory_count so Apply handler can mutate the product.
                 action_data = {
-                    "suggested_change": "Increase available inventory for products repeatedly rejected due to stock.",
+                    "suggested_change": "Restock to 50 units and reactivate listings rejected due to zero inventory.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "INVENTORY_ISSUE",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
+                    "new_inventory_count": 50,
+                    "before_state_description": "0 / inactive",
+                    "after_state_description": "50 units, active",
                 }
 
             elif reason == FrictionReason.MISSING_FEATURE.value or reason == "MISSING_FEATURE":

@@ -27,6 +27,7 @@ import {
   getPositiveSignals,
   getFrictionSignals,
 } from './simulationLogHelpers';
+import { FrictionExplorer } from './FrictionExplorer';
 
 interface ScenarioDecisionLogProps {
   item: SimulationResultItem;
@@ -469,59 +470,13 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
             </div>
           )}
 
-          {/* LAYER 7: FRICTION & REJECTION SIGNALS */}
+          {/* LAYER 7: MERCHANT FRICTION EXPLORER */}
           {frictionSignals.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-                <h4 className="font-bold text-red-800 flex items-center text-xs uppercase tracking-wider">
-                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-red-600" /> 7. Detected Friction & Rejection Signals
-                </h4>
-                <span className="text-[11px] text-red-700 font-semibold">{frictionSignals.length} friction points</span>
-              </div>
-
-              <div className="space-y-2">
-                {frictionSignals.map((f, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3 rounded-lg border flex items-start justify-between gap-3 ${
-                      f.type === 'HARD_BLOCKER'
-                        ? 'bg-red-50/70 border-red-200 text-red-900'
-                        : 'bg-amber-50/60 border-amber-200 text-amber-900'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-2.5">
-                      {f.type === 'HARD_BLOCKER' ? (
-                        <XCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs">{f.title}</span>
-                          <span className="font-mono text-[10px] bg-white/80 px-1.5 py-0.2 rounded border border-gray-200">
-                            {f.reason}
-                          </span>
-                        </div>
-                        <p className="text-[11px] mt-0.5 opacity-90">{f.description}</p>
-                        {f.affectedProductName && (
-                          <p className="text-[10px] text-gray-500 mt-1">
-                            Affected Item: <strong>{f.affectedProductName}</strong>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
-                        f.type === 'HARD_BLOCKER' ? 'bg-red-200 text-red-900' : 'bg-amber-200 text-amber-900'
-                      }`}
-                    >
-                      {f.type === 'HARD_BLOCKER' ? 'HARD BLOCKER' : 'SOFT PENALTY'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <FrictionExplorer
+              signals={frictionSignals}
+              productsMap={productsMap}
+              intentSummary={intentSummary}
+            />
           )}
 
           {/* Reason Code Tags */}

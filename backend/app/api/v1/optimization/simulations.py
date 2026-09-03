@@ -67,6 +67,46 @@ SCENARIO_VARIANTS = {
 }
 
 
+SCENARIO_WEIGHT_OVERRIDES: Dict[str, Dict[str, float]] = {
+    # QUALITY scenario-specific weight profiles (normalized to 1.00)
+    "quality_essentials": {
+        "quality": 0.50,
+        "metadata": 0.20,
+        "returns": 0.15,
+        "delivery": 0.10,
+        "price": 0.05,
+    },
+    "quality_premium": {
+        "quality": 0.55,
+        "metadata": 0.25,
+        "returns": 0.10,
+        "delivery": 0.05,
+        "price": 0.05,
+    },
+    "quality_returns": {
+        "returns": 0.40,
+        "quality": 0.30,
+        "metadata": 0.15,
+        "delivery": 0.10,
+        "price": 0.05,
+    },
+    "quality_complete": {
+        "metadata": 0.45,
+        "quality": 0.35,
+        "returns": 0.10,
+        "delivery": 0.05,
+        "price": 0.05,
+    },
+    "quality_balanced": {
+        "quality": 0.30,
+        "price": 0.25,
+        "metadata": 0.20,
+        "delivery": 0.15,
+        "returns": 0.10,
+    },
+}
+
+
 def _resolve_persona_weights(profile_name: str, db_personas: List[BuyerPersona]) -> Dict[str, float]:
     upper_name = profile_name.upper()
     if upper_name in PERSONA_PROFILE_MAP:
@@ -202,7 +242,7 @@ def run_simulation(
     # Detect hard constraints, soft friction, calculate scores, deterministic tie-breaking, select winners
     for index in range(req.scenario_count):
         base_profile_name = profiles[index % len(profiles)]
-        weights = _resolve_persona_weights(base_profile_name, db_personas)
+        base_weights = _resolve_persona_weights(base_profile_name, db_personas)
 
         if req.intent:
             intent_dict = req.intent.model_dump()
@@ -233,6 +273,11 @@ def run_simulation(
                 intent_dict["delivery_deadline_days"] = deadline
 
         full_persona_name = f"{base_profile_name}:{variant_label}"
+
+        # Resolve scenario-specific weights without mutating global persona profiles
+        weights = dict(base_weights)
+        if variant_label in SCENARIO_WEIGHT_OVERRIDES:
+            weights = dict(SCENARIO_WEIGHT_OVERRIDES[variant_label])
 
         sim_output = simulation_engine.run_simulation(
             merchant_id=str(merchant_id),

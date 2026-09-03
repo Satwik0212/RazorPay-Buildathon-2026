@@ -88,7 +88,7 @@ export const BuyerFlow = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const merchantId = localStorage.getItem('buyer_merchant_id') || '123e4567-e89b-12d3-a456-426614174000';
+      const merchantId = localStorage.getItem('buyer_merchant_id') || 'e715fbe6-b364-4b99-a46d-f802ab164faf';
       const res = await campaignsApi.getActiveCampaigns(merchantId);
       setActiveCampaigns(res.data.filter(c => c.status === 'ACTIVE'));
     } catch (err) {
@@ -230,17 +230,40 @@ export const BuyerFlow = () => {
       name: "Razorpay Buildathon Store",
       description: "Test Transaction",
       order_id: activeOrder.razorpay_order_id,
-      handler: function (response: any) {
-        // Success handler
-        console.log("Payment success:", response);
-        setStep('success');
+      handler: async function (response: any) {
+        // P0-3 FIX: Verify payment on the server before showing success.
+        // The backend validates HMAC signature, transitions order to PAID,
+        // creates a Payment record, marks the cart COMPLETED, and decrements inventory.
+        setLoading(true);
+        setError('');
+        try {
+          const token = localStorage.getItem('buyer_token');
+          const verifyRes = await axios.post(
+            `${import.meta.env.VITE_API_URL || '/api/v1'}/payments/verify`,
+            {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (verifyRes.data.success) {
+            setStep('success');
+          } else {
+            setError('Payment verification failed. Please contact support.');
+          }
+        } catch (err: any) {
+          setError(err.response?.data?.detail || 'Payment verification failed. Please try again.');
+        } finally {
+          setLoading(false);
+        }
       },
       prefill: {
         name: "Test Buyer",
         email: "buyer@demo.com",
       },
       theme: {
-        color: "#3399cc"
+        color: "#6822CC"
       }
     };
     

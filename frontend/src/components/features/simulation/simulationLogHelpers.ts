@@ -50,6 +50,7 @@ export interface FrictionSignal {
   title: string;
   description: string;
   affectedProductName?: string;
+  productId?: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
@@ -688,6 +689,7 @@ export const getFrictionSignals = (
       title: mapped.title,
       description: mapped.description,
       affectedProductName: f.product_name,
+      productId: f.product_id,
       severity: mapped.severity,
     });
   });

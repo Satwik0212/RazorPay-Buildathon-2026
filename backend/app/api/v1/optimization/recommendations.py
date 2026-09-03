@@ -116,6 +116,15 @@ def update_recommendation_status(
                         product.price = rec.action_data["new_price"]
                         changed = True
                     after_state["price"] = product.price
+                elif rec.action_data.get("new_price_mode") == "percent_discount":
+                    # Dynamically calculate the new price based on the discount percentage
+                    pct = rec.action_data.get("new_price_discount_pct", 10)
+                    new_price = int(product.price * (1 - (pct / 100.0)))
+                    before_state["price"] = product.price
+                    if product.price != new_price:
+                        product.price = new_price
+                        changed = True
+                    after_state["price"] = product.price
                 
                 # Support both explicitly populated action_data (new recommendations) 
                 # and fallback to recommendation type inference (for older recommendations in DB)

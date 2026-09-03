@@ -44,9 +44,14 @@ class CatalogueSearchRequest(BaseModel):
 
 class SearchResultItem(BaseModel):
     product_id: uuid.UUID
+    id: uuid.UUID  # alias for product_id – used by frontend cart creation
+    merchant_id: Optional[uuid.UUID] = None
     name: str
     price: int
     category: str
+    description: str = ""
+    metadata: Optional[Dict[str, Any]] = None
+    inventory: Optional[Dict[str, Any]] = None
     match_score: float
     matched_constraints: List[str] = Field(default_factory=list)
     failed_constraints: List[str] = Field(default_factory=list)
