@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, func
 from app.models.product import Product, Inventory
@@ -54,6 +54,48 @@ class ProductRepository:
             self.db.execute(stmt.order_by(Product.id).limit(limit).offset(offset)).unique().scalars().all()
         )
         return products, total
+
+    def get_active_catalogue_for_merchant(self, merchant_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """
+        Retrieves the complete active catalogue for the authenticated merchant in a single query.
+        Utilizes a Core column-level query outer-joining Inventory to avoid ORM hydration overhead
+        while preserving deterministic Product.id ordering and truthful inventory semantics.
+        """
+        stmt = (
+            select(
+                Product.id,
+                Product.name,
+                Product.description,
+                Product.category,
+                Product.price,
+                Product.currency,
+                Product.is_active,
+                Product.product_metadata,
+                Inventory.available_quantity,
+            )
+            .outerjoin(Inventory, Product.id == Inventory.product_id)
+            .where(
+                Product.merchant_id == merchant_id,
+                Product.is_active == True,
+            )
+            .order_by(Product.id)
+        )
+        rows = self.db.execute(stmt).all()
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "description": r.description or "",
+                "category": r.category,
+                "price": r.price,
+                "currency": r.currency,
+                "is_active": r.is_active,
+                "product_metadata": r.product_metadata or {},
+                "available_quantity": r.available_quantity,
+            }
+            for r in rows
+        ]
+
 
     def list_categories(self, merchant_id: uuid.UUID) -> List[str]:
         stmt = select(Product.category).where(Product.merchant_id == merchant_id).where(Product.category != None).distinct()

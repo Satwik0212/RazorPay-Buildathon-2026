@@ -162,6 +162,12 @@ class ProductService:
     def list_categories(self, merchant_id: uuid.UUID) -> List[str]:
         return self.repo.list_categories(merchant_id)
 
+    def get_active_catalogue(self, merchant_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """
+        Returns the complete active catalogue for the merchant formatted for simulation consumption.
+        """
+        return self.repo.get_active_catalogue_for_merchant(merchant_id)
+
     def update_inventory(self, product_id: uuid.UUID, merchant_id: uuid.UUID, quantity: int) -> Inventory:
         product = self.get_product_by_id(product_id)
         if product.merchant_id != merchant_id:

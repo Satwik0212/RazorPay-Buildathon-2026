@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
@@ -125,6 +125,29 @@ def _build_expanded_variant_pool(persona_key: str) -> List[tuple]:
     return base_pool + extended
 
 
+def truncate_rankings(
+    rankings: List[Dict[str, Any]],
+    selected_product_id: Optional[Any],
+    max_passed: int = 20,
+    max_disqualified: int = 10,
+) -> List[Dict[str, Any]]:
+    passed = [r for r in rankings if r.get("passed") is True]
+    disqualified = [r for r in rankings if r.get("passed") is False]
+
+    truncated_passed = passed[:max_passed]
+    truncated_disqualified = disqualified[:max_disqualified]
+
+    selected_id_str = str(selected_product_id) if selected_product_id else None
+    if selected_id_str:
+        winner_in_passed = any(str(r.get("product_id")) == selected_id_str for r in truncated_passed)
+        if not winner_in_passed:
+            winner_item = next((r for r in passed[max_passed:] if str(r.get("product_id")) == selected_id_str), None)
+            if winner_item:
+                truncated_passed.append(winner_item)
+
+    return truncated_passed + truncated_disqualified
+
+
 @router.post("/simulations", response_model=SimulationResponse, status_code=status.HTTP_200_OK)
 def run_simulation(
     req: SimulationCreate,
@@ -135,25 +158,10 @@ def run_simulation(
     Executes synchronous, deterministic buyer simulations against the merchant's catalogue.
     Evaluates real buyer personas, applies hard/soft constraints, and detects friction.
     """
+    # 1. Retrieve all active products for the authenticated merchant
     merchant_id = current_merchant.id
     product_service = ProductService(db)
-    db_products, _ = product_service.list_products(merchant_id=merchant_id, limit=100)
-
-    # Convert DB products to dictionary catalogue format
-    catalogue: List[Dict[str, Any]] = []
-    for p in db_products:
-        inv_qty = p.inventory.available_quantity if hasattr(p, "inventory") and p.inventory else 10
-        catalogue.append({
-            "id": p.id,
-            "name": p.name,
-            "description": p.description or "",
-            "category": p.category,
-            "price": p.price,
-            "currency": p.currency,
-            "is_active": p.is_active,
-            "product_metadata": p.product_metadata or {},
-            "available_quantity": inv_qty,
-        })
+    catalogue = product_service.get_active_catalogue(merchant_id=merchant_id)
 
     # Fetch personas from DB
     db_personas = db.query(BuyerPersona).all()
@@ -167,12 +175,10 @@ def run_simulation(
             profiles = ["BUDGET", "SPEED", "QUALITY", "BALANCED"]
 
     sim_id = uuid.uuid4()
-    results: List[SimulationResultItem] = []
     friction_summary: Dict[str, int] = {}
     detailed_frictions: List[Dict[str, Any]] = []
     persona_success_count: Dict[str, int] = {}
-    
-    db_results = []
+    evaluations: List[Dict[str, Any]] = []
 
     # Pre-build the expanded variant pool for every distinct selected persona.
     # Each persona's pool starts with its 5 curated base variants, then continues
@@ -192,7 +198,8 @@ def run_simulation(
         for p in set(profiles)
     }
 
-    # Run simulation iterations
+    # 2 & 3. In-memory simulation over ALL candidates:
+    # Detect hard constraints, soft friction, calculate scores, deterministic tie-breaking, select winners
     for index in range(req.scenario_count):
         base_profile_name = profiles[index % len(profiles)]
         weights = _resolve_persona_weights(base_profile_name, db_personas)
@@ -227,7 +234,6 @@ def run_simulation(
 
         full_persona_name = f"{base_profile_name}:{variant_label}"
 
-
         sim_output = simulation_engine.run_simulation(
             merchant_id=str(merchant_id),
             persona_weights=weights,
@@ -238,7 +244,7 @@ def run_simulation(
 
         selected_id = uuid.UUID(sim_output["selected_product_id"]) if sim_output["selected_product_id"] else None
 
-        # Track friction summary
+        # Track friction summary & detailed frictions across 100% of candidate evaluations
         for f in sim_output.get("frictions", []):
             reason_name = f.get("reason", "UNKNOWN")
             friction_summary[reason_name] = friction_summary.get(reason_name, 0) + 1
@@ -252,38 +258,23 @@ def run_simulation(
         if sim_output["constraints_satisfied"]:
             persona_success_count[full_persona_name] = persona_success_count.get(full_persona_name, 0) + 1
 
-        result_item = SimulationResultItem(
-            persona_name=full_persona_name,
-            selected_product_id=selected_id,
-            score=sim_output["score"],
-            constraints_satisfied=sim_output["constraints_satisfied"],
-            reason_codes=sim_output["reason_codes"],
-            frictions=sim_output["frictions"],
-            rankings=sim_output["rankings"],
-            explanation=sim_output["explanation"],
-            intent=intent_dict,
-            persona_weights=weights,
-        )
-        results.append(result_item)
-        
-        db_results.append(SimulationResult(
-            id=uuid.uuid4(),
-            persona_name=full_persona_name,
-            selected_product_id=selected_id,
-            score=sim_output["score"],
-            constraints_satisfied=sim_output["constraints_satisfied"],
-            reason_codes=sim_output["reason_codes"],
-            frictions=sim_output["frictions"],
-            rankings=sim_output["rankings"],
-            explanation=sim_output["explanation"],
-        ))
+        evaluations.append({
+            "full_persona_name": full_persona_name,
+            "selected_id": selected_id,
+            "weights": weights,
+            "intent_dict": intent_dict,
+            "sim_output": sim_output,
+        })
 
-    # Compute comprehensive summary metrics
-    total_simulated = len(results)
-    successful_matches = sum(1 for r in results if r.constraints_satisfied and r.selected_product_id is not None)
+    # 4. Generate summary metrics and recommendation evidence across 100% of candidate evaluation results
+    total_simulated = len(evaluations)
+    successful_matches = sum(
+        1 for e in evaluations
+        if e["sim_output"]["constraints_satisfied"] and e["selected_id"] is not None
+    )
     failed_matches = total_simulated - successful_matches
     satisfaction_rate = round(successful_matches / max(total_simulated, 1), 3)
-    avg_score = round(sum(r.score for r in results) / max(total_simulated, 1), 3)
+    avg_score = round(sum(e["sim_output"]["score"] for e in evaluations) / max(total_simulated, 1), 3)
 
     summary_metrics = {
         "buyers_simulated": total_simulated,
@@ -293,12 +284,56 @@ def run_simulation(
         "average_score": avg_score,
         "friction_distribution": friction_summary,
         "persona_success_rates": {
-            p: round(persona_success_count.get(p, 0) / max(sum(1 for r in results if r.persona_name == p), 1), 2)
-            for p in set(r.persona_name for r in results)
+            p: round(persona_success_count.get(p, 0) / max(sum(1 for e in evaluations if e["full_persona_name"] == p), 1), 2)
+            for p in set(e["full_persona_name"] for e in evaluations)
         },
         "metric_type": "SIMULATED RESULT",
     }
-    
+
+    # 5. ONLY AFTER all decision, summary, and recommendation calculations are complete:
+    # Truncate serialized & persisted rankings representation
+    results: List[SimulationResultItem] = []
+    db_results = []
+
+    for ev in evaluations:
+        sim_out = ev["sim_output"]
+        sel_id = ev["selected_id"]
+        persona_name = ev["full_persona_name"]
+        weights = ev["weights"]
+        intent_dict = ev["intent_dict"]
+
+        truncated_rankings = truncate_rankings(
+            rankings=sim_out["rankings"],
+            selected_product_id=sel_id,
+            max_passed=20,
+            max_disqualified=10,
+        )
+
+        results.append(SimulationResultItem(
+            persona_name=persona_name,
+            selected_product_id=sel_id,
+            score=sim_out["score"],
+            constraints_satisfied=sim_out["constraints_satisfied"],
+            reason_codes=sim_out["reason_codes"],
+            frictions=sim_out["frictions"],
+            rankings=truncated_rankings,
+            explanation=sim_out["explanation"],
+            intent=intent_dict,
+            persona_weights=weights,
+        ))
+
+        db_results.append(SimulationResult(
+            id=uuid.uuid4(),
+            persona_name=persona_name,
+            selected_product_id=sel_id,
+            score=sim_out["score"],
+            constraints_satisfied=sim_out["constraints_satisfied"],
+            reason_codes=sim_out["reason_codes"],
+            frictions=sim_out["frictions"],
+            rankings=truncated_rankings,
+            explanation=sim_out["explanation"],
+        ))
+
     # Persist the SimulationRun and SimulationResult records
     sim_run = SimulationRun(
         id=sim_id,
@@ -315,7 +350,13 @@ def run_simulation(
     # Persist the collected friction evidence as actionable recommendations
     if detailed_frictions:
         from app.services.optimization.recommendation_service import recommendation_service
-        recommendation_service.generate_recommendations(db, merchant_id, detailed_frictions, simulation_run_id=sim_id, scenario_count=total_simulated)
+        recommendation_service.generate_recommendations(
+            db,
+            merchant_id,
+            detailed_frictions,
+            simulation_run_id=sim_id,
+            scenario_count=total_simulated,
+        )
 
     return SimulationResponse(
         simulation_id=sim_id,

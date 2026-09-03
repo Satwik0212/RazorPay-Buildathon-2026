@@ -29,23 +29,9 @@ def run_what_if_analysis(
     """
     merchant_id = current_merchant.id
     product_service = ProductService(db)
-    db_products, _ = product_service.list_products(merchant_id=merchant_id, limit=50)
-
-    # Convert DB products to dictionary catalogue format
-    catalogue: List[Dict[str, Any]] = []
-    for p in db_products:
-        inv_qty = p.inventory.available_quantity if hasattr(p, "inventory") and p.inventory else 10
-        catalogue.append({
-            "id": str(p.id),
-            "name": p.name,
-            "description": p.description or "",
-            "category": p.category,
-            "price": p.price,
-            "currency": p.currency,
-            "is_active": p.is_active,
-            "product_metadata": p.product_metadata or {},
-            "available_quantity": inv_qty,
-        })
+    catalogue = product_service.get_active_catalogue(merchant_id=merchant_id)
+    for p in catalogue:
+        p["id"] = str(p["id"])
 
     if not catalogue:
         raise ValidationError("Merchant catalogue is empty. Cannot execute what-if analysis on an empty catalogue.")
