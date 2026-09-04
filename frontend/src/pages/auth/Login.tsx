@@ -20,11 +20,21 @@ export const Login = () => {
     try {
       const response = await apiClient.post('/auth/login', { email, password });
       localStorage.setItem('access_token', response.data.access_token);
-      
-      // Optionally fetch user profile to determine route, defaulting to dashboard
-      navigate('/dashboard');
+
+      const userRole = response.data.user?.role || response.data.role;
+      if (userRole === 'CUSTOMER') {
+        localStorage.setItem('buyer_token', response.data.access_token);
+        navigate('/buyer');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      setError(
+        err.response?.data?.error?.message ||
+        (typeof err.response?.data?.detail === 'string' ? err.response?.data?.detail : null) ||
+        err.response?.data?.message ||
+        'Login failed. Please try again.'
+      );
     } finally {
       setLoading(false);
     }

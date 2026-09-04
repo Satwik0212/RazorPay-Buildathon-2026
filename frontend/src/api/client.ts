@@ -42,3 +42,13 @@ buyerApiClient.interceptors.request.use((config) => {
   }
   return config;
 }, (error) => Promise.reject(error));
+
+buyerApiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('buyer_token');
+    }
+    return Promise.reject(error);
+  }
+);

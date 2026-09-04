@@ -1188,3 +1188,107 @@ Prioritization:
 
 Scope protection confirmed:
 > No recommendation is being made merely because it would make the project more sophisticated. The goal is maximum probability of producing a technically credible, strategically aligned, polished, memorable Razorpay AI Buildathon submission within the remaining time.
+
+## 2026-09-04T10:37:22Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: Very large team of agents (recommended for 15+ tracks of parallel QA)
+
+Comprehensive browser-driven E2E verification, QA, and bug fixing of the Razorpay Buildathon 2026 project.
+
+Working directory: D:\projectas\razor-Pay-Buildathon
+Integrity mode: development
+
+Use a very large team of agents. This is a massive cross-cutting verification program requiring parallel browser testing across multiple workflows.
+
+---
+
+## Requirements
+
+### R1. Browser-Driven Verification (Rules 1-3 & 8-10)
+- You must use the real browser to test the product. Open the running application (Frontend: http://localhost:5173, Backend: http://localhost:8000).
+- Test like a real user: navigate, click, fill forms, submit, observe states. 
+- Capture screenshots for every major workflow checkpoint (landing, product, cart, checkout, payment success/failure, audit logs).
+- Never fabricate test results, metrics, or webhooks.
+- Do not expose secrets in the final report.
+
+### R2. Strict Bug-Fix Loop (Rules 4-5)
+- For every failure, classify it (Frontend, Backend, Database, Payment, etc.).
+- Reproduce → Capture Evidence → Find Root Cause → Fix Minimal Surface Area → Add/Update Regression Test → Retest in Browser → Capture Success Evidence.
+
+### R3. Architectural Boundaries (Rules 6-7)
+- Preserve current architecture. Do not introduce Kafka, Redis, LangGraph, vector DBs, or new payment architectures.
+- Respect Phase boundaries. Phase 1 & 2 are implemented. Do not build Phase 3 until Gates 0-6 pass.
+
+### R4. Specialized Track Execution (Tracks A-Q)
+Execute the following QA tracks in parallel where possible:
+- **Track A:** System Forensics
+- **Track B:** Buyer Browser QA (Specifically investigate the known "Failed to add to cart" blocker)
+- **Track C:** Cart QA
+- **Track D:** Quote QA (Verify server-side pricing authority)
+- **Track E:** Authorization / Policy QA
+- **Track F:** Razorpay Test Mode E2E (Must independently verify actual checkout UI and payment)
+- **Track G:** Payment Failure QA
+- **Track H:** Webhook / Idempotency QA (Test duplicate delivery)
+- **Track I:** Transaction & Audit QA
+- **Track J:** Merchant Dashboard QA
+- **Track K:** AI Buyer QA
+- **Track L:** Merchant Optimization QA
+- **Track M:** Phase 3 QA (Only after existing app is stable and Phase 2 verified)
+- **Track N, O, P, Q:** UI/UX, Responsive, Security/Isolation, Error/Edge-case QA
+
+### R5. Automated Testing & Safety
+- Run `pytest backend/tests/` and `npm run build` after fixes.
+- Do not create a second database or destroy data unnecessarily. Use safe test data.
+
+### R6. Test Isolation & Concurrency Control
+- Because multiple agents will test the application concurrently, you must isolate browser sessions, authentication states, and test data.
+- Coordinate and serialize workflows that mutate shared state (carts, checkout, payment, inventory, webhooks). Do not run conflicting mutations simultaneously.
+- A failure caused by another agent's concurrent test is NOT a product bug.
+- Before reporting any bug, you MUST reproduce it in an isolated/clean state.
+
+## Acceptance Criteria
+
+### Gate 0 — Baseline
+- [ ] Application starts, frontend builds, backend starts, database/auth/navigation works.
+
+### Gate 1 — Buyer Core
+- [ ] Catalogue → Product → Add to Cart (Bug fixed) → Cart → Quote passes.
+
+### Gate 2 — Checkout
+- [ ] Cart → Quote → Authorization → Razorpay Order → Razorpay Checkout passes.
+
+### Gate 3 & 4 — Payment & Resilience
+- [ ] Test Payment → Server Verify → Local Transaction → Merchant Visibility → Audit passes.
+- [ ] Invalid verify, duplicate webhook, customer isolation tested and secure.
+
+### Gate 5, 6, & 7 — Merchant, AI Buyer, Phase 3
+- [ ] Dashboard, Optimization, Recommendations, Transactions work.
+- [ ] AI intent matching works without determining financial outcomes directly.
+- [ ] Upsell/cross-sell (Phase 3) works safely and is audited.
+
+### Gate 8 — Full Regression & Final Report
+- [ ] Full backend/frontend automated tests pass.
+- [ ] Full browser journey from clean state passes.
+- [ ] `docs/qa/full_browser_qa_report.md` generated meeting all 14 format requirements.
+- [ ] Final Demo Readiness clearly stated (READY or NOT READY).
+
+## 2026-09-04T10:39:33Z
+
+Gate 7 — Phase 3: Execute ONLY after Gates 0–6 have independently passed, including successful browser verification of the real Razorpay Test Mode checkout/payment flow.
+
+## 2026-09-04T12:52:34Z
+
+SCOPE UPDATE FROM USER:
+
+The user has explicitly instructed to DEFER Phase 3 (Gate 7).
+
+Do NOT implement or execute Phase 3 (Upsell/Cross-sell Agent) during this task. 
+
+Complete Gates 0 through 6 (Full Browser QA, E2E Razorpay Verification, Bug Fixes, Merchant & AI Buyer QA), run full regression, generate the final QA report (docs/qa/full_browser_qa_report.md), and STOP. The user will request Phase 3 separately later on.
+
+
+

@@ -4,7 +4,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { 
   ShoppingBag, Search, ShoppingCart, ShieldCheck, 
-  CheckCircle, ArrowLeft, Loader2, AlertCircle, XCircle 
+  CheckCircle, ArrowLeft, Loader2, AlertCircle, XCircle,
+  Plus, Minus, Trash2
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { authApi } from '../../api/auth';
@@ -28,6 +29,16 @@ declare global {
     Razorpay: any;
   }
 }
+
+const extractErrorMessage = (err: any, fallback: string): string => {
+  return (
+    err.response?.data?.error?.message ||
+    (typeof err.response?.data?.detail === 'string' ? err.response?.data?.detail : null) ||
+    err.response?.data?.message ||
+    err.message ||
+    fallback
+  );
+};
 
 export const BuyerFlow = () => {
   const [step, setStep] = useState<'auth' | 'catalog' | 'product_detail' | 'cart' | 'checkout' | 'success'>('auth');
@@ -80,7 +91,7 @@ export const BuyerFlow = () => {
       fetchProducts();
       fetchCampaigns();
     } catch (err: any) {
-      setError(err.response?.data?.detail || `Failed to ${authMode}`);
+      setError(extractErrorMessage(err, `Failed to ${authMode}`));
     } finally {
       setLoading(false);
     }
@@ -96,15 +107,18 @@ export const BuyerFlow = () => {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (query?: string) => {
     setLoading(true);
     try {
-      const res = await buyerApiClient.get('/catalog');
+      const endpoint = query?.trim()
+        ? `/catalog?search=${encodeURIComponent(query.trim())}`
+        : '/catalog';
+      const res = await buyerApiClient.get(endpoint);
       // Assume the paginated response has items
       setProducts(res.data.items || []);
     } catch (err: any) {
       console.error(err);
-      setError('Failed to load catalog.');
+      setError(extractErrorMessage(err, 'Failed to load catalog.'));
     } finally {
       setLoading(false);
     }
@@ -129,17 +143,11 @@ export const BuyerFlow = () => {
         });
         setProducts(searchRes.data.results || []);
       } else {
-        // Standard search - fetch all and filter client side for demo, 
-        // or call backend with search param if API supports it
-        const res = await buyerApiClient.get('/catalog');
-        const all = res.data.items || [];
-        setProducts(all.filter((p: Product) => 
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-          p.description?.toLowerCase().includes(searchQuery.toLowerCase())
-        ));
+        // Standard search - pass search param to backend endpoint enabling server-side full catalog search across all 2,980 products
+        await fetchProducts(searchQuery.trim());
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Search failed.');
+      setError(extractErrorMessage(err, 'Search failed.'));
     } finally {
       setLoading(false);
     }
@@ -159,6 +167,10 @@ export const BuyerFlow = () => {
 
   const addToCart = async () => {
     if (!selectedProduct) return;
+    if (selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0) {
+      setError('This product is currently out of stock.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -179,7 +191,53 @@ export const BuyerFlow = () => {
       setActiveCart(res.data);
       setStep('cart');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to add to cart.');
+      if (err.response?.status === 401) {
+        localStorage.removeItem('buyer_token');
+        setStep('auth');
+        setError('Your session has expired. Please sign in again.');
+      } else {
+        setError(extractErrorMessage(err, 'Failed to add to cart.'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateQuantity = async (itemId: string, newQuantity: number) => {
+    if (!activeCart || newQuantity < 1) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await cartsApi.updateItem(activeCart.id, itemId, { quantity: newQuantity });
+      setActiveCart(res.data);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('buyer_token');
+        setStep('auth');
+        setError('Your session has expired. Please sign in again.');
+      } else {
+        setError(extractErrorMessage(err, 'Failed to update item quantity.'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!activeCart) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await cartsApi.removeItem(activeCart.id, itemId);
+      setActiveCart(res.data);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('buyer_token');
+        setStep('auth');
+        setError('Your session has expired. Please sign in again.');
+      } else {
+        setError(extractErrorMessage(err, 'Failed to remove item.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -208,7 +266,13 @@ export const BuyerFlow = () => {
       
       setStep('checkout');
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Checkout initialization failed.');
+      if (err.response?.status === 401) {
+        localStorage.removeItem('buyer_token');
+        setStep('auth');
+        setError('Your session has expired. Please sign in again.');
+      } else {
+        setError(extractErrorMessage(err, 'Checkout initialization failed.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -253,7 +317,7 @@ export const BuyerFlow = () => {
             setError('Payment verification failed. Please contact support.');
           }
         } catch (err: any) {
-          setError(err.response?.data?.detail || 'Payment verification failed. Please try again.');
+          setError(extractErrorMessage(err, 'Payment verification failed. Please try again.'));
         } finally {
           setLoading(false);
         }
@@ -480,15 +544,27 @@ export const BuyerFlow = () => {
               <div className="flex items-center justify-between mt-auto pt-6 border-t border-gray-200">
                 <div>
                   <p className="text-3xl font-bold text-[var(--rzp-text)]">{formatPrice(selectedProduct.price)}</p>
-                  <p className="text-sm text-[var(--rzp-success)] font-medium mt-1 flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-1" /> 
-                    {selectedProduct.inventory?.available_quantity 
-                      ? `${selectedProduct.inventory.available_quantity} in stock` 
-                      : 'In stock'}
-                  </p>
+                  {selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0 ? (
+                    <p className="text-sm text-[var(--rzp-danger)] font-medium mt-1 flex items-center">
+                      <XCircle className="h-4 w-4 mr-1" /> Out of stock
+                    </p>
+                  ) : (
+                    <p className="text-sm text-[var(--rzp-success)] font-medium mt-1 flex items-center">
+                      <CheckCircle className="h-4 w-4 mr-1" /> 
+                      {selectedProduct.inventory?.available_quantity !== undefined 
+                        ? `${selectedProduct.inventory.available_quantity} in stock` 
+                        : 'In stock'}
+                    </p>
+                  )}
                 </div>
-                <Button onClick={addToCart} isLoading={loading} size="lg" className="px-8">
-                  Add to Cart
+                <Button 
+                  onClick={addToCart} 
+                  isLoading={loading} 
+                  disabled={Boolean(selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0)}
+                  size="lg" 
+                  className="px-8"
+                >
+                  {selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0 ? 'Out of Stock' : 'Add to Cart'}
                 </Button>
               </div>
             </div>
@@ -573,18 +649,60 @@ export const BuyerFlow = () => {
               <div className="lg:col-span-2 space-y-4">
                 {activeCart.items.map((item) => (
                   <Card key={item.id}>
-                    <CardContent className="p-4 flex items-center">
-                      <div className="bg-gray-100 h-20 w-20 rounded flex items-center justify-center mr-4">
-                        <ShoppingBag className="h-8 w-8 text-gray-400" />
+                    <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center space-x-4 flex-grow">
+                        <div className="bg-gray-100 h-20 w-20 rounded flex items-center justify-center shrink-0">
+                          <ShoppingBag className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900">{item.product?.name || `Product ID: ${item.product_id}`}</h4>
+                          <p className="text-sm text-gray-500">
+                            {item.product ? `${formatPrice(item.product.price)} each` : ''}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-grow">
-                        <h4 className="font-bold">{item.product?.name || `Product ID: ${item.product_id}`}</h4>
-                        <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold">
-                          {item.product ? formatPrice(item.product.price * item.quantity) : 'Price unknown'}
-                        </p>
+
+                      <div className="flex items-center justify-between sm:justify-end space-x-4">
+                        <div className="flex items-center border rounded-md">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                            disabled={loading || item.quantity <= 1}
+                            title="Decrease quantity"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-8 text-center text-sm font-semibold">{item.quantity}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                            disabled={loading}
+                            title="Increase quantity"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+
+                        <div className="text-right min-w-[80px]">
+                          <p className="font-bold text-[var(--rzp-text)]">
+                            {item.product ? formatPrice(item.product.price * item.quantity) : 'Price unknown'}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleRemoveItem(item.id)}
+                          disabled={loading}
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -597,6 +715,14 @@ export const BuyerFlow = () => {
                     <CardTitle>Order Summary</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="flex justify-between font-medium text-gray-700">
+                      <span>Estimated Subtotal</span>
+                      <span>
+                        {formatPrice(
+                          activeCart.items.reduce((acc, item) => acc + (item.product?.price || 0) * item.quantity, 0)
+                        )}
+                      </span>
+                    </div>
                     <p className="text-sm text-gray-500 flex items-start bg-blue-50 p-3 rounded text-blue-800">
                       <ShieldCheck className="h-5 w-5 mr-2 shrink-0" />
                       The definitive total will be calculated by the server during checkout to apply taxes, shipping, and discounts securely.

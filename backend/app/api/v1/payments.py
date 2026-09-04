@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.constants import UserRole, OrderStatus, PaymentStatus, CartStatus, AuditEventType, ActorType
-from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError, PaymentError
 from app.schemas.payment.responses import PaymentResponse, PaymentStatusResponse
 from app.services.payment_service import PaymentService
 from app.services.audit_service import AuditService
@@ -64,7 +64,7 @@ def verify_payment(
         digestmod=hashlib.sha256,
     ).hexdigest()
     if not hmac.compare_digest(expected_sig, req.razorpay_signature):
-        raise ValidationError("Invalid Razorpay payment signature. Payment verification failed.")
+        raise PaymentError("Invalid Razorpay payment signature. Payment verification failed.", code="INVALID_SIGNATURE")
 
     # 2. Find the order
     order_repo = OrderRepository(db)
