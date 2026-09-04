@@ -332,6 +332,8 @@ export interface UpsellSuggestion {
   category: string;
   score: number;
   explanation?: string;
+  recommendation_type: 'UPSELL' | 'CROSS_SELL';
+  ai_confidence?: number;
 }
 
 export interface UpsellResponse {
@@ -339,6 +341,7 @@ export interface UpsellResponse {
   cross_sell: UpsellSuggestion[];
   anchor_product_ids: string[];
   data_source: string;
+  ai_powered: boolean;
 }
 
 export type CampaignStatus = "PROPOSED" | "ACTIVE" | "PAUSED" | "ENDED";

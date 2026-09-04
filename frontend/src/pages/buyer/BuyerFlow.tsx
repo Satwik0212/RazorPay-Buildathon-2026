@@ -574,9 +574,20 @@ export const BuyerFlow = () => {
           {upsellData && (upsellData.upsell.length > 0 || upsellData.cross_sell.length > 0) && (
             <div className="mt-12 space-y-12 border-t pt-10">
               
+              {/* AI-powered badge */}
+              {upsellData.ai_powered && (
+                <div className="flex items-center gap-2 text-xs text-[var(--rzp-primary)] font-semibold">
+                  <span className="bg-blue-50 border border-blue-200 rounded-full px-3 py-1">✦ AI-Powered Recommendations</span>
+                  <span className="text-gray-400 font-normal">Grounded in your catalogue — no invented claims</span>
+                </div>
+              )}
+
               {upsellData.upsell.length > 0 && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-6">You might also consider</h3>
+                  <div className="flex items-center gap-3 mb-6">
+                    <h3 className="text-2xl font-bold">You might also consider</h3>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold uppercase tracking-wider">Upgrade</span>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {upsellData.upsell.map(item => (
                       <Card key={item.product_id} className="cursor-pointer hover:shadow-md transition-shadow border-blue-100" onClick={() => {
@@ -591,7 +602,10 @@ export const BuyerFlow = () => {
                           <h4 className="font-bold mb-1 line-clamp-1">{item.name}</h4>
                           <p className="text-lg font-bold mb-2">{formatPrice(item.price)}</p>
                           {item.explanation && (
-                            <p className="text-sm text-gray-500 line-clamp-2 italic bg-blue-50 p-2 rounded">{item.explanation}</p>
+                            <p className="text-sm text-gray-500 line-clamp-3 italic bg-blue-50 p-2 rounded">{item.explanation}</p>
+                          )}
+                          {item.ai_confidence !== undefined && (
+                            <div className="mt-2 text-xs text-gray-400">AI relevance: {Math.round(item.ai_confidence * 100)}%</div>
                           )}
                         </CardContent>
                       </Card>
@@ -602,7 +616,10 @@ export const BuyerFlow = () => {
 
               {upsellData.cross_sell.length > 0 && (
                 <div>
-                  <h3 className="text-2xl font-bold mb-6">Complete your setup</h3>
+                  <div className="flex items-center gap-3 mb-6">
+                    <h3 className="text-2xl font-bold">Complete your setup</h3>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-semibold uppercase tracking-wider">Pair with this</span>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {upsellData.cross_sell.map(item => (
                       <Card key={item.product_id} className="cursor-pointer hover:shadow-md transition-shadow border-green-100" onClick={() => {
@@ -617,7 +634,10 @@ export const BuyerFlow = () => {
                           <h4 className="font-bold mb-1 line-clamp-1">{item.name}</h4>
                           <p className="text-lg font-bold mb-2">{formatPrice(item.price)}</p>
                           {item.explanation && (
-                            <p className="text-sm text-gray-500 line-clamp-2 italic bg-green-50 p-2 rounded">{item.explanation}</p>
+                            <p className="text-sm text-gray-500 line-clamp-3 italic bg-green-50 p-2 rounded">{item.explanation}</p>
+                          )}
+                          {item.ai_confidence !== undefined && (
+                            <div className="mt-2 text-xs text-gray-400">AI relevance: {Math.round(item.ai_confidence * 100)}%</div>
                           )}
                         </CardContent>
                       </Card>

@@ -17,18 +17,26 @@ class GroqProvider:
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model = settings.GROQ_MODEL
 
-    def generate_structured(self, prompt: str, schema: Type[T]) -> Optional[T]:
+    def generate_structured(self, prompt: str, schema: Type[T], system_prompt: Optional[str] = None) -> Optional[T]:
         if not self.api_key:
             return None
 
         try:
             schema_json = schema.model_json_schema()
 
-            system_prompt = f"""You are a specialized buyer intent extraction engine.
+            if system_prompt is None:
+                system_prompt = f"""You are a specialized buyer intent extraction engine.
 You MUST output strictly valid JSON matching the following JSON schema:
 {json.dumps(schema_json)}
 
 Extract the user's intent. Do NOT add markdown formatting. Output raw JSON only."""
+            else:
+                system_prompt = f"""{system_prompt}
+
+You MUST output strictly valid JSON matching the following JSON schema:
+{json.dumps(schema_json)}
+
+Do NOT add markdown formatting. Output raw JSON only."""
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -98,14 +106,22 @@ class SarvamProvider:
         self.base_url = "https://api.sarvam.ai/v1/chat/completions"
         self.model = settings.SARVAM_MODEL
 
-    def generate_structured(self, prompt: str, schema: Type[T]) -> Optional[T]:
+    def generate_structured(self, prompt: str, schema: Type[T], system_prompt: Optional[str] = None) -> Optional[T]:
         if not self.api_key:
             return None
 
         try:
             schema_json = schema.model_json_schema()
 
-            system_prompt = f"""Extract the user's intent as JSON matching this schema:
+            if system_prompt is None:
+                system_prompt = f"""Extract the user's intent as JSON matching this schema:
+{json.dumps(schema_json)}
+
+Respond with JSON only. No explanations."""
+            else:
+                system_prompt = f"""{system_prompt}
+
+Output JSON matching this schema:
 {json.dumps(schema_json)}
 
 Respond with JSON only. No explanations."""
@@ -310,11 +326,11 @@ class LLMClient:
         self.sarvam = SarvamProvider(settings.SARVAM_API_KEY)
         self.offline = OfflineProvider()
 
-    def generate_structured(self, prompt: str, schema: Type[T]) -> T:
+    def generate_structured(self, prompt: str, schema: Type[T], system_prompt: Optional[str] = None) -> T:
         # Try Groq
         if settings.GROQ_API_KEY:
             try:
-                result = self.groq.generate_structured(prompt, schema)
+                result = self.groq.generate_structured(prompt, schema, system_prompt)
                 if result is not None:
                     logger.info("provider=groq")
                     return result
@@ -324,7 +340,7 @@ class LLMClient:
         # Try Sarvam
         if settings.SARVAM_API_KEY:
             try:
-                result = self.sarvam.generate_structured(prompt, schema)
+                result = self.sarvam.generate_structured(prompt, schema, system_prompt)
                 if result is not None:
                     logger.info("provider=sarvam")
                     return result

@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel
 
 
@@ -10,6 +10,8 @@ class UpsellSuggestion(BaseModel):
     category: str
     score: float
     explanation: Optional[str] = None
+    recommendation_type: Literal["UPSELL", "CROSS_SELL"] = "UPSELL"
+    ai_confidence: Optional[float] = None
 
 
 class UpsellResponse(BaseModel):
@@ -17,3 +19,4 @@ class UpsellResponse(BaseModel):
     cross_sell: List[UpsellSuggestion]
     anchor_product_ids: List[uuid.UUID]
     data_source: str = "DETERMINISTIC_CATALOGUE_SCORING"
+    ai_powered: bool = False
