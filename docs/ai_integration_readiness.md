@@ -110,3 +110,7 @@ To run the application locally or in a demo environment:
 2. Start the backend.
 3. Natural language queries will now leverage the Groq LLM API.
 4. Omitting the keys will seamlessly engage the Deterministic Offline engine.
+
+
+## September 4 Update: Simulation Precision
+- AI boundaries remain strict. Simulation engine scores and ranks are 100% deterministic using Python. LLM is not used for sorting, tie-breaking, or metadata normalization.

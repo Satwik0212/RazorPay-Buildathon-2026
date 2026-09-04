@@ -3551,3 +3551,8 @@ Data in hierarchy.
 Motion in state.
 Nothing decorative without purpose.
 ```
+
+
+## September 4 UX/Terminology Audit
+- **"X products passed filters"**: The frontend funnel display may show truncated subset counts (e.g., 30 products) instead of the full evaluated 2,977 catalogue. The terminology should reflect "Displayed Products" rather than "Products Evaluated".
+- **"What-If Match Rate"**: This is a catalogue-level evaluation, mathematically accurate given the full active catalogue scope, but overriding one product out of 2,977 may show very small deltas.

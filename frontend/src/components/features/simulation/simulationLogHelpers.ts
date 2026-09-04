@@ -74,7 +74,9 @@ export const formatPrice = (priceInMinor?: number | null): string => {
 export const getPersonaMeta = (personaName: string): PersonaMeta => {
   const parts = (personaName || '').split(':');
   const base = (parts[0] || 'BALANCED').toUpperCase();
-  const variant = parts[1] || '';
+  // For CUSTOM personas the variant is everything after "CUSTOM:" e.g. "Weekend Audio Buyer"
+  // For predefined personas it is the scenario code e.g. "budget_tight"
+  const variant = parts.slice(1).join(':') || '';
 
   const personaMap: Record<string, { displayName: string; icon: string; badgeBg: string; badgeText: string; badgeBorder: string }> = {
     BUDGET: {
@@ -112,6 +114,13 @@ export const getPersonaMeta = (personaName: string): PersonaMeta => {
       badgeText: 'text-indigo-700',
       badgeBorder: 'border-indigo-200',
     },
+    CUSTOM: {
+      displayName: 'Custom AI Buyer',
+      icon: '🎯',
+      badgeBg: 'bg-fuchsia-50',
+      badgeText: 'text-fuchsia-700',
+      badgeBorder: 'border-fuchsia-200',
+    },
   };
 
   const meta = personaMap[base] || {
@@ -122,10 +131,18 @@ export const getPersonaMeta = (personaName: string): PersonaMeta => {
     badgeBorder: 'border-gray-200',
   };
 
-  // Humanize variant
-  const variantLabel = variant
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Default Scenario';
+  // For CUSTOM personas: use the buyer name as the display label (strip run suffix if present)
+  // e.g. "Weekend Audio Buyer:run_1" → "Weekend Audio Buyer"
+  let variantLabel: string;
+  if (base === 'CUSTOM') {
+    // variant is like "Weekend Audio Buyer" or "Weekend Audio Buyer:run_1"
+    const buyerName = variant.replace(/:run_\d+$/, '').trim();
+    variantLabel = buyerName || 'Custom Buyer';
+  } else {
+    variantLabel = variant
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Default Scenario';
+  }
 
   return {
     baseName: base,

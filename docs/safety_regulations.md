@@ -2061,3 +2061,7 @@ Example Protocol:
 → duplicate detected (via `webhook_events.event_id` uniqueness)
 → no duplicate state transition
 → audit event recorded
+
+
+## September 4 Safety Check
+- Confirmed: No product values are fabricated in simulation fallback (e.g. no fake price, rating, or inventory). `Inventory.available_quantity` is read truthfully. Fallbacks on frontend only use existing `rankings` array fields.

@@ -17,15 +17,18 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Package
+  Package,
+  PenLine
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { personasApi } from '../../api/personas';
 import { productsApi } from '../../api/products';
 import { authApi } from '../../api/auth';
-import type { BuyerPersona, Product, SimulationResponse } from '../../types';
+import type { BuyerPersona, Product, SimulationResponse, CustomBuyerConfig } from '../../types';
 import { RecommendationPipelineHeader, type PipelineStepId } from '../../components/features/recommendations';
 import { ScenarioDecisionLog } from '../../components/features/simulation';
+import CustomSimulationModal from '../../components/features/simulation/CustomSimulationModal';
+
 
 export const SimulationDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -34,7 +37,9 @@ export const SimulationDashboard: React.FC = () => {
   const currentStep: PipelineStepId = (stepParam === 'friction') ? 'friction' : 'simulation';
 
   const [simulating, setSimulating] = useState(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
   const [results, setResults] = useState<SimulationResponse | null>(null);
+
   const [baselineRun, setBaselineRun] = useState<SimulationResponse | null>(null);
   const [error, setError] = useState('');
 
@@ -67,6 +72,22 @@ export const SimulationDashboard: React.FC = () => {
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
   }, [stepParam, results]);
+
+  // Auto-trigger a fresh simulation when navigated here with ?rerun=true
+  // (e.g., after clicking "Re-run Simulation" on a recommendation card).
+  // Clears the param immediately to prevent re-firing on subsequent renders.
+  const rerunParam = searchParams.get('rerun');
+  useEffect(() => {
+    if (rerunParam === 'true') {
+      // Remove the rerun param first to prevent infinite loop
+      setSearchParams({ step: 'simulation' }, { replace: true });
+      // Slight delay to let the param removal complete before kicking off the sim
+      setTimeout(() => {
+        runSimulation();
+      }, 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rerunParam]);
 
   const handleStepClick = (step: PipelineStepId) => {
     if (step === 'simulation') {
@@ -153,6 +174,34 @@ export const SimulationDashboard: React.FC = () => {
     }
   };
 
+  const runCustomSimulation = async (config: CustomBuyerConfig) => {
+    setIsCustomModalOpen(false);
+    setSimulating(true);
+    setError('');
+    try {
+      const realMerchantId = await authApi.getOrInitMerchantId();
+      if (!realMerchantId) throw new Error("No merchant session found.");
+
+      if (results) {
+        setBaselineRun(results);
+        try {
+          sessionStorage.setItem('simulation_baseline_run', JSON.stringify(results));
+        } catch {
+          // ignore
+        }
+      }
+
+      const res = await simulationApi.runSimulation({ custom_buyer: config });
+      setResults(res.data);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Custom simulation failed to execute.');
+    } finally {
+      setSimulating(false);
+    }
+  };
+
+
+
   const getPersonaIcon = (name: string) => {
     const n = name.toUpperCase();
     if (n.includes('BUDGET')) return '💰';
@@ -193,6 +242,15 @@ export const SimulationDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsCustomModalOpen(true)}
+            disabled={simulating}
+            className="px-4 py-2 text-xs font-semibold border border-[var(--rzp-ai)] text-[var(--rzp-ai)] rounded-lg hover:bg-[var(--rzp-ai-soft)] transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Custom Simulation
+          </button>
           <Button onClick={runSimulation} isLoading={simulating} variant="ai" className="px-5 shadow-sm font-semibold">
             <Play className="h-4 w-4 mr-2" /> Run Simulation
           </Button>
@@ -317,11 +375,20 @@ export const SimulationDashboard: React.FC = () => {
             </div>
             <h3 className="text-base font-semibold text-[var(--rzp-text)]">No Active Simulation Run</h3>
             <p className="text-xs text-[var(--rzp-text-muted)] max-w-md mt-1">
-              Select buyer personas above and click <strong>Run Simulation</strong> to diagnose how agents rank your products and where frictions occur.
+              Choose a predefined buyer persona below, or create your own custom AI buyer to diagnose how agents rank your products.
             </p>
-            <Button onClick={runSimulation} className="mt-5" variant="ai" size="sm">
-              <Play className="h-4 w-4 mr-1.5" /> Start Simulation
-            </Button>
+            <div className="flex items-center gap-3 mt-5">
+              <Button onClick={runSimulation} variant="ai" size="sm">
+                <Play className="h-4 w-4 mr-1.5" /> Start Simulation
+              </Button>
+              <button
+                type="button"
+                onClick={() => setIsCustomModalOpen(true)}
+                className="px-4 py-1.5 text-xs font-semibold border border-[var(--rzp-ai)] text-[var(--rzp-ai)] rounded-lg hover:bg-[var(--rzp-ai-soft)] transition-colors flex items-center gap-1.5"
+              >
+                <PenLine className="h-3.5 w-3.5" /> Custom Simulation
+              </button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -330,7 +397,28 @@ export const SimulationDashboard: React.FC = () => {
       {/* Live Simulation Results */}
       {results && !simulating && (
         <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Custom simulation result banner */}
+          {results.summary_metrics?.metric_type === 'CUSTOM SIMULATION' && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-fuchsia-50 via-purple-50 to-indigo-50 border border-fuchsia-200 rounded-xl text-sm">
+              <span className="text-xl shrink-0">🎯</span>
+              <div className="flex-1 min-w-0">
+                <span className="font-bold text-fuchsia-800">
+                  Custom Buyer Simulation — "{results.summary_metrics.custom_buyer_name}"
+                </span>
+                <span className="text-fuchsia-600 text-xs ml-2">
+                  {results.scenario_count} scenario{results.scenario_count !== 1 ? 's' : ''} ·{' '}
+                  {Math.round((results.summary_metrics.constraint_satisfaction_rate || 0) * 100)}% match rate ·{' '}
+                  Avg score {Math.round((results.summary_metrics.average_score || 0) * 100)}%
+                </span>
+              </div>
+              <span className="text-[11px] bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                CUSTOM
+              </span>
+            </div>
+          )}
+
           {/* SECTION: BEFORE vs AFTER SIMULATION COMPARISON (WHEN BASELINE EXISTS) */}
+
           {baselineRun && (
             <Card className="border-2 border-[var(--rzp-primary)] shadow-sm bg-gradient-to-br from-white via-purple-50/20 to-white">
               <CardHeader className="pb-3 border-b border-[var(--rzp-border)]">
@@ -629,6 +717,14 @@ export const SimulationDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Custom Simulation Modal (portal-like fixed overlay) */}
+      <CustomSimulationModal
+        isOpen={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        onSubmit={runCustomSimulation}
+        isLoading={simulating}
+      />
     </div>
   );
 };

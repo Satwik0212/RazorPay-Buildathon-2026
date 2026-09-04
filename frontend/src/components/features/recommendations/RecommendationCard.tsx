@@ -264,7 +264,7 @@ export const RecommendationCard: React.FC<RecommendationCardProps> = ({
               <Button
                 variant="ai"
                 size="sm"
-                onClick={() => navigate('/simulation?step=simulation')}
+                onClick={() => navigate('/simulation?step=simulation&rerun=true')}
                 className="text-xs font-semibold shadow-sm"
               >
                 <Play className="h-3 w-3 mr-1" /> Re-run Simulation

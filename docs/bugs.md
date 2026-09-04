@@ -406,3 +406,27 @@ Frontend requests were failing with 422 when attempting to comply with the new s
 - Removed merchant_id from SimulationCreate and WhatIfRequest backend schemas.
 - Removed merchant_id from frontend TypeScript types, API definitions, and React component API calls.
 - Both frontend and backend contracts are now reconciled around the JWT identity context.
+
+# BUG-011 - Recommendation "After" display shows 2 days -> 2 days
+- Severity: LOW
+- Category: UI/UX / Recommendation Engine
+- Status: **OPEN**
+- Root Cause: In `backend/app/services/optimization/recommendation_service.py`, the `DELIVERY_TOO_SLOW` recommendation hardcodes `"after_state_description": "2 days"` and `"new_delivery_days": 2`. If a buyer scenario has `delivery_deadline_days=1` (e.g., ultra-fast delivery persona), and the product has 2 days, it fails the constraint. The recommendation then says "Before: 2 days -> After: 2 days" which is confusing because the new value should be 1 to satisfy the buyer.
+
+# BUG-012 - What-If Simulator appears to show almost identical results despite significant overrides
+- Severity: LOW
+- Category: Simulation 
+- Status: **FIXED** / AS-DESIGNED
+- Root Cause: Previously, simulations used `limit=100` and what-if used `limit=50`. With the implementation of Full Active Catalogue retrieval in Step 3, the What-If Simulator correctly evaluates the entire catalogue (e.g. 2,977 products). Overriding a single product out of 2,977 will naturally have a minimal impact on the catalogue-level aggregate scores unless that specific product becomes the winner across multiple scenarios. This is mathematically correct behavior.
+
+# BUG-013 - Applied recommendations persist in UI but subsequent simulation shows original friction
+- Severity: MEDIUM
+- Category: Recommendation State
+- Status: **PARTIALLY FIXED**
+- Root Cause: When a recommendation is applied, `recommendations.py` updates the `product.product_metadata` and calls `flag_modified`. However, `simulations.py` reads from `get_active_catalogue_for_merchant()`. While the database is correctly mutated, the UI lists recommendations based on the **latest simulation run** (`SimulationRun.status == "COMPLETED"`). So unless a new simulation is explicitly run, the UI continues to show frictions from the *past* simulation even though the product is already fixed in the DB.
+
+# BUG-014 - Candidate Funnel displays "0 of 10 products passed filters" while simulation evaluates 2,977
+- Severity: LOW
+- Category: UI/UX
+- Status: **OPEN**
+- Root Cause: The frontend hardcodes or misinterprets the limit (e.g. displaying the truncation limit of top 10 disqualified) instead of displaying the true evaluated catalogue size (2,977). The backend returns `scenario_count` but the frontend needs to read `total_products` from the overview API to display the correct funnel base.

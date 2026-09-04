@@ -3021,3 +3021,8 @@ failure case tested
 ```
 
 This keeps the project demonstrable throughout development.
+
+
+## September 4 Discrepancy Audit
+- `POST /optimization/simulations`: No longer limits catalogue to 100 products. Retrieves full active catalogue in memory. Payload response is truncated to top 31 items max (20 passed + 10 disqualified + winner).
+- `POST /optimization/what-if`: No longer limits catalogue to 50 products. Retrieves full active catalogue. Response remains unchanged but Delta computation is mathematically sound across the full catalogue.

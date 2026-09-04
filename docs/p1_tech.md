@@ -2201,3 +2201,7 @@ The P1 system should follow this exact separation:
 ```
 
 **P1 should make the product smarter, more explainable, and more useful to merchants — without taking control away from deterministic business logic or the merchant.**
+
+
+## September 4 Boundary Update
+- Advanced custom buyer simulation (`custom_buyer` payload) is fully implemented and operational.

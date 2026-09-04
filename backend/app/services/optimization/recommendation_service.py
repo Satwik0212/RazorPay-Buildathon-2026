@@ -108,8 +108,8 @@ class RecommendationService:
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
                     "new_delivery_days": 2,
-                    "before_state_description": "Unknown",
-                    "after_state_description": "2 days"
+                    "before_state_description": "Unknown (no delivery_days in metadata)",
+                    "after_state_description": "2 days (structured)"
                 }
 
             elif reason == "DELIVERY_TOO_SLOW" or (hasattr(FrictionReason, "DELIVERY_TOO_SLOW") and reason == FrictionReason.DELIVERY_TOO_SLOW.value):
@@ -117,16 +117,18 @@ class RecommendationService:
                 title = "Reduce Delivery Time"
                 rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because delivery time exceeded strict deadlines across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Reduce delivery time to 2 days.",
+                    "suggested_change": "Reduce delivery time to 1 day (express shipping) to satisfy speed-focused SLA constraints.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "DELIVERY_TOO_SLOW",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
-                    "new_delivery_days": 2,
-                    "before_state_description": ">2 days",
-                    "after_state_description": "2 days"
+                    # Target 1 day — eliminates all speed persona SLA friction (deadline is ≤2 days;
+                    # products with delivery_days=2 already fail a ≤1 day constraint, so target must be 1).
+                    "new_delivery_days": 1,
+                    "before_state_description": ">1 day (current delivery exceeds speed persona SLA)",
+                    "after_state_description": "1 day (express SLA)"
                 }
 
             elif reason == FrictionReason.PRICE_MISMATCH.value or reason == "PRICE_MISMATCH":

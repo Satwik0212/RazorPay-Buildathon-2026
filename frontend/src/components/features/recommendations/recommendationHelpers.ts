@@ -173,9 +173,12 @@ export const getRecommendationFieldDetails = (
   const prodName = product ? product.name : (rec.title || 'Target Product');
 
   if (fType.includes('DELIVERY') || rec.type.includes('DELIVERY')) {
-    const currentVal = product?.metadata?.delivery_days !== undefined
-      ? `${product.metadata.delivery_days} days`
-      : 'Unknown / Missing';
+    // Prefer the semantic description captured at simulation time (not live product field,
+    // which may already show the target value making BEFORE == AFTER appear).
+    const currentVal = rec.action_data?.before_state_description
+      ?? (product?.metadata?.delivery_days !== undefined
+          ? `${product.metadata.delivery_days} days`
+          : 'Unknown / Missing');
     const targetVal = rec.action_data?.new_delivery_days !== undefined
       ? `${rec.action_data.new_delivery_days} days`
       : '2 days';
@@ -215,9 +218,11 @@ export const getRecommendationFieldDetails = (
   }
 
   if (fType.includes('RETURN') || rec.type.includes('RETURN')) {
-    const currentReturn = product?.metadata?.return_days !== undefined
-      ? `${product.metadata.return_days} days`
-      : 'Unknown / Not specified';
+    // Prefer semantic description captured at simulation time
+    const currentReturn = rec.action_data?.before_state_description
+      ?? (product?.metadata?.return_days !== undefined
+          ? `${product.metadata.return_days} days`
+          : 'Unknown / Not specified');
     const targetReturn = rec.action_data?.new_return_days !== undefined
       ? `${rec.action_data.new_return_days} days`
       : '14 days';

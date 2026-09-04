@@ -413,3 +413,9 @@ An AI-commerce readiness and simulation layer that lets merchants see how AI sho
 Why not an outright yes today: the project as currently *specified* (not built) has internal contradictions a careful judge reading the repo would notice within minutes (§6), is scoped for more time than is available, and the AI story as currently framed invites a "is this really AI" question the team hasn't pre-armed itself to answer. None of these are fatal — they're exactly the kind of issues a strong team fixes in the first day of building, which is the point of this review.
 
 **Minimum changes to turn this into YES:** ship a single, working, end-to-end Test Mode transaction with a verifiably-idempotent duplicate webhook demo; ship one real, honestly-labeled simulated-improvement number from a working what-if comparison; resolve the API/DB contradictions before writing code so the demo doesn't break from an integration mismatch; and say the AI framing out loud and correctly in the pitch instead of letting a judge discover the gap themselves. Do those four things, and this becomes one of the stronger Track 1 submissions on the strength of its payment/security engineering alone.
+
+
+## September 4 Update
+- **Resolved**: Frontend matched truth bug (`constraints_satisfied && selected_product_id`).
+- **Resolved**: Backend `limit=100` truncation blocking active catalogue evaluation.
+- **Resolved**: Payload bloat. Ranked products are truncated in the final response.

@@ -3411,3 +3411,7 @@ The backend is responsible for **truth, calculation, validation, authorization, 
 Razorpay is responsible for **payment execution**.
 
 That separation is the foundation of the P0 implementation.
+
+
+## September 4 Boundary Update
+- Full Active Catalogue Evaluation is now part of the **P0 Core Boundary** because truncation caused severe diversity bugs and hidden rejections. P0 requires 100% accurate evaluations before payload serialization.

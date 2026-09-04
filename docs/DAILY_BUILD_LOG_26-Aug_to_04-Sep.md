@@ -130,3 +130,9 @@ No further major architectural redesign should be undertaken unless implementati
   - Added client-side live search filtering on `Catalogue.tsx`.
 - Verified the complete 54/54 backend test suite passes and frontend production build succeeds in < 3s with zero errors.
 
+
+## September 4, 2026
+
+### Completed
+- **Full Active Catalogue Retrieval (Step 3):** Simulation and What-If endpoints now evaluate 100% of the active catalogue (e.g. 2,977 products) deterministically in-memory before truncating the API payload to max 31 items (top 20 passed + 10 disqualified + winner). This increased match rates from ~37.5% to ~72.5% and reduced payload bloat by 99.39%.
+- **Documentation Forensics:** Created logic.md as the canonical source of truth for all formulas and calculations.

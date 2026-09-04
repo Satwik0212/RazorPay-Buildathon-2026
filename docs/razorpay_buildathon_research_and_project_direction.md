@@ -3619,3 +3619,7 @@ To protect credibility with Razorpay engineers evaluating this submission, we mu
 
 **Why we are keeping it synchronous for the demo:**
 We do NOT build a background queue for the hackathon because it obscures the deterministic API boundaries we need to prove. The hackathon priority is proving the safety model, the API contracts, and the core transactional loop. Introducing complex asynchronous infrastructure would distract from the "Wow Factor" of a deterministic, safe, and transparent AI commerce flow.
+
+
+## September 4 Direction Check
+- The AI Commerce control plane prioritizes analytical correctness over perceived diversity. We do NOT manipulate scoring or randomly sample the catalogue merely to make the winner distribution look diverse. Determinism is paramount.

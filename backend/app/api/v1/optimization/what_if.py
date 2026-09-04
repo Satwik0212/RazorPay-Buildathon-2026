@@ -71,5 +71,6 @@ def run_what_if_analysis(
         simulated_metrics=comparison["simulated_metrics"],
         delta_percentage=comparison["delta_percentage"],
         created_at=datetime.now(timezone.utc),
+        target_product_metrics=comparison.get("target_product_metrics"),
     )
 

@@ -165,6 +165,12 @@ export interface SimulationResultItem {
     [key: string]: any;
   };
   persona_weights?: Record<string, number>;
+  /** Total products evaluated before rankings were truncated for response size */
+  total_products_evaluated?: number;
+  /** Total products that passed all hard constraints (before truncation) */
+  total_eligible?: number;
+  /** Total products that failed at least one hard constraint (before truncation) */
+  total_disqualified?: number;
 }
 
 export interface SimulationSummaryMetrics {
@@ -176,6 +182,23 @@ export interface SimulationSummaryMetrics {
   friction_distribution?: Record<string, number>;
   persona_success_rates?: Record<string, number>;
   metric_type?: string;
+  custom_buyer_name?: string;
+}
+
+/** Merchant-defined custom buyer for the "Create Your Own Simulation" feature. */
+export interface CustomBuyerConfig {
+  name: string;                                // Display name, e.g. "Weekend Audio Buyer"
+  max_budget?: number;                         // Rupees (₹), converted to paise server-side
+  delivery_deadline_days?: number;             // Days 1–365
+  requirements: string[];                      // Feature keywords, e.g. ["warranty", "bluetooth"]
+  weights: {
+    quality: number;
+    metadata: number;
+    returns: number;
+    delivery: number;
+    price: number;
+  };                                           // Must sum to 1.0 (100%)
+  scenario_count: number;                      // 1 | 5 | 10 | 20
 }
 
 export interface SimulationResponse {
@@ -188,6 +211,7 @@ export interface SimulationResponse {
   results: SimulationResultItem[];
   created_at: string;
 }
+
 
 export interface Recommendation {
   id: string;
@@ -228,6 +252,19 @@ export interface WhatIfMetrics {
   [key: string]: any;
 }
 
+export interface WhatIfTargetMetrics {
+  product_id: string;
+  baseline_avg_score: number;
+  proposed_avg_score: number;
+  score_delta: number;
+  score_delta_pct: number;
+  baseline_eligible_rate: number;
+  proposed_eligible_rate: number;
+  eligibility_delta: number;
+  scenarios_evaluated: number;
+  note: string;
+}
+
 export interface WhatIfResponse {
   id: string;
   merchant_id: string;
@@ -237,6 +274,8 @@ export interface WhatIfResponse {
   simulated_metrics: WhatIfMetrics;
   delta_percentage: number;
   created_at: string;
+  /** Present only when a specific product_id is targeted. Product-level scores, not catalogue-wide. */
+  target_product_metrics?: WhatIfTargetMetrics;
 }
 
 export interface MerchantOverviewAnalytics {

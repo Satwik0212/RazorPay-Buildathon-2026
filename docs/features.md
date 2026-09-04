@@ -382,3 +382,9 @@ The AI can **propose** an action.
 The deterministic backend decides whether that action is **valid and allowed**.
 
 Money calculations, limits, authorization, payment verification, idempotency, and policy enforcement should never depend solely on an LLM.
+
+
+## September 4 Feature Status
+- **IMPLEMENTED**: Custom Buyer Simulation (allows `req.custom_buyer` overrides with max_budget scaling to minor units).
+- **IMPLEMENTED**: Full Active Catalogue Simulation (100% evaluation before ranking truncation).
+- **IMPLEMENTED**: ScenarioDecisionLog for precise client-side match truth.

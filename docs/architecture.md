@@ -1798,3 +1798,7 @@ The system must always preserve this boundary:
 **The product is not an LLM wrapped around Razorpay.**
 
 It is a controlled commerce system where AI handles reasoning-heavy tasks, deterministic services handle correctness and authorization, and Razorpay handles payment execution.
+
+
+## September 4 Update: Full Catalogue Processing Architecture
+- **Simulation/What-If Layer**: Upgraded from truncated DB sampling to **Full Active Catalogue In-Memory Evaluation**. The system retrieves 100% of the active catalogue via a single SQL query (`outerjoin` with Inventory), evaluates constraints and scores in Python, and truncates the API response payload by dropping extraneous rankings.

@@ -590,86 +590,168 @@ export const Optimization: React.FC = () => {
 
             {whatIfResult && !whatIfLoading && (
               <div className="space-y-4 animate-in fade-in duration-300">
-                {/* Comparison Card */}
-                <Card className="border-2 border-[var(--rzp-primary)] shadow-sm">
-                  <CardHeader className="pb-3 bg-[var(--rzp-primary-soft)] border-b border-[var(--rzp-primary)]">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm text-[var(--rzp-primary)] flex items-center font-bold">
-                        <Sparkles className="h-4 w-4 mr-1.5" /> What-If Comparative Outcome
-                      </CardTitle>
-                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center ${
-                        whatIfResult.delta_percentage >= 0
-                          ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)] border border-[var(--rzp-success)]'
-                          : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] border border-[var(--rzp-danger)]'
-                      }`}>
-                        {whatIfResult.delta_percentage >= 0 ? (
-                          <TrendingUp className="h-3.5 w-3.5 mr-1" />
-                        ) : (
-                          <TrendingDown className="h-3.5 w-3.5 mr-1" />
-                        )}
-                        Score Delta: {whatIfResult.delta_percentage >= 0 ? `+${whatIfResult.delta_percentage}%` : `${whatIfResult.delta_percentage}%`}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Baseline Box */}
-                      <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
-                        <span className="font-bold text-gray-500 uppercase tracking-wider block text-[10px]">
-                          Current Baseline
-                        </span>
-                        <div className="text-xl font-black text-[var(--rzp-text)]">
-                          {(
-                            (whatIfResult.baseline_metrics.simulated_selection_rate !== undefined
-                              ? whatIfResult.baseline_metrics.simulated_selection_rate
-                              : whatIfResult.baseline_metrics.conversion_rate !== undefined
-                              ? whatIfResult.baseline_metrics.conversion_rate
-                              : 0) * 100
-                          ).toFixed(1)}% Match
+                {/* TARGET PRODUCT PANEL (primary, when a specific product is targeted) */}
+                {whatIfResult.target_product_metrics && selectedProductId && (() => {
+                  const tpm = whatIfResult.target_product_metrics!;
+                  const scoreDeltaPositive = tpm.score_delta >= 0;
+                  const eligDelta = tpm.eligibility_delta;
+                  return (
+                    <Card className="border-2 border-[var(--rzp-primary)] shadow-sm">
+                      <CardHeader className="pb-3 bg-[var(--rzp-primary-soft)] border-b border-[var(--rzp-primary)]">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm text-[var(--rzp-primary)] flex items-center font-bold">
+                            <Sparkles className="h-4 w-4 mr-1.5" /> What-If: Target Product Outcome
+                          </CardTitle>
+                          <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center ${
+                            scoreDeltaPositive
+                              ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)] border border-[var(--rzp-success)]'
+                              : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] border border-[var(--rzp-danger)]'
+                          }`}>
+                            {scoreDeltaPositive ? <TrendingUp className="h-3.5 w-3.5 mr-1" /> : <TrendingDown className="h-3.5 w-3.5 mr-1" />}
+                            Score Delta: {scoreDeltaPositive ? `+${tpm.score_delta_pct}%` : `${tpm.score_delta_pct}%`}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-[var(--rzp-text-muted)]">
-                          {whatIfResult.baseline_metrics.average_score !== undefined
-                            ? `Avg Score: ${whatIfResult.baseline_metrics.average_score}`
-                            : whatIfResult.baseline_metrics.average_order_value !== undefined
-                            ? `Simulated AOV: ${formatPriceInINR(whatIfResult.baseline_metrics.average_order_value)}`
-                            : 'Deterministic Baseline'}
-                        </p>
+                      </CardHeader>
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          {/* Baseline Product Box */}
+                          <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-2">
+                            <span className="font-bold text-gray-500 uppercase tracking-wider block text-[10px]">
+                              Current Baseline
+                            </span>
+                            <div className="text-xl font-black text-[var(--rzp-text)]">
+                              {(tpm.baseline_avg_score * 100).toFixed(1)}%
+                            </div>
+                            <p className="text-[11px] text-[var(--rzp-text-muted)]">Match Score</p>
+                            <p className="text-[11px] text-gray-500">
+                              Eligible: {(tpm.baseline_eligible_rate * 100).toFixed(0)}% of {tpm.scenarios_evaluated} personas
+                            </p>
+                          </div>
+                          {/* Proposed Product Box */}
+                          <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-2">
+                            <span className="font-bold text-[var(--rzp-ai)] uppercase tracking-wider block text-[10px]">
+                              Proposed (Simulated)
+                            </span>
+                            <div className="text-xl font-black text-[var(--rzp-primary)]">
+                              {(tpm.proposed_avg_score * 100).toFixed(1)}%
+                            </div>
+                            <p className="text-[11px] text-[var(--rzp-text-muted)]">Match Score</p>
+                            <p className="text-[11px] text-gray-500">
+                              Eligible: {(tpm.proposed_eligible_rate * 100).toFixed(0)}% of {tpm.scenarios_evaluated} personas
+                              {eligDelta > 0 && <span className="ml-1 text-emerald-700 font-semibold">(↑ +{(eligDelta * 100).toFixed(0)}%)</span>}
+                              {eligDelta < 0 && <span className="ml-1 text-red-700 font-semibold">(↓ {(eligDelta * 100).toFixed(0)}%)</span>}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-gray-50 rounded-md border border-gray-100 text-xs text-[var(--rzp-text-secondary)]">
+                          <strong>Hypothesis: </strong>{whatIfResult.hypothesis}
+                        </div>
+                        {/* Catalogue-wide context (secondary) */}
+                        <details className="text-[11px] text-[var(--rzp-text-muted)] border-t border-gray-100 pt-2 cursor-pointer">
+                          <summary className="font-semibold text-gray-500 hover:text-gray-700 select-none">
+                            Catalogue-wide context (all {whatIfResult.baseline_metrics.total_scenarios} personas, all products)
+                          </summary>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="p-2 bg-gray-50 rounded border border-gray-100">
+                              <span className="text-gray-400 block">Baseline match rate</span>
+                              <span className="font-semibold">{((whatIfResult.baseline_metrics.simulated_selection_rate ?? 0) * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="p-2 bg-purple-50/50 rounded border border-purple-100">
+                              <span className="text-gray-400 block">Proposed match rate</span>
+                              <span className="font-semibold">{((whatIfResult.simulated_metrics.simulated_selection_rate ?? 0) * 100).toFixed(1)}%</span>
+                            </div>
+                          </div>
+                          <p className="mt-1.5 text-[10px] text-gray-400">
+                            Catalogue-wide metrics change slowly when only one product of {products.length}+ is modified.
+                          </p>
+                        </details>
+                        <div className="text-[11px] text-[var(--rzp-text-muted)] flex items-center justify-between pt-1 border-t border-gray-100">
+                          <span>In-Memory Evaluation · Zero Production Mutation</span>
+                          <span className="font-mono text-gray-500">ID: {whatIfResult.id.slice(0, 8)}...</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                {/* CATALOGUE-WIDE PANEL (shown only when no specific product targeted) */}
+                {!whatIfResult.target_product_metrics && (
+                  <Card className="border-2 border-[var(--rzp-primary)] shadow-sm">
+                    <CardHeader className="pb-3 bg-[var(--rzp-primary-soft)] border-b border-[var(--rzp-primary)]">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm text-[var(--rzp-primary)] flex items-center font-bold">
+                          <Sparkles className="h-4 w-4 mr-1.5" /> What-If Comparative Outcome
+                        </CardTitle>
+                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center ${
+                          whatIfResult.delta_percentage >= 0
+                            ? 'bg-[var(--rzp-success-soft)] text-[var(--rzp-success)] border border-[var(--rzp-success)]'
+                            : 'bg-[var(--rzp-danger-soft)] text-[var(--rzp-danger)] border border-[var(--rzp-danger)]'
+                        }`}>
+                          {whatIfResult.delta_percentage >= 0 ? (
+                            <TrendingUp className="h-3.5 w-3.5 mr-1" />
+                          ) : (
+                            <TrendingDown className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Score Delta: {whatIfResult.delta_percentage >= 0 ? `+${whatIfResult.delta_percentage}%` : `${whatIfResult.delta_percentage}%`}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Baseline Box */}
+                        <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1.5">
+                          <span className="font-bold text-gray-500 uppercase tracking-wider block text-[10px]">
+                            Current Baseline
+                          </span>
+                          <div className="text-xl font-black text-[var(--rzp-text)]">
+                            {(
+                              (whatIfResult.baseline_metrics.simulated_selection_rate !== undefined
+                                ? whatIfResult.baseline_metrics.simulated_selection_rate
+                                : whatIfResult.baseline_metrics.conversion_rate !== undefined
+                                ? whatIfResult.baseline_metrics.conversion_rate
+                                : 0) * 100
+                            ).toFixed(1)}% Match
+                          </div>
+                          <p className="text-[11px] text-[var(--rzp-text-muted)]">
+                            {whatIfResult.baseline_metrics.average_score !== undefined
+                              ? `Avg Score: ${whatIfResult.baseline_metrics.average_score}`
+                              : 'Deterministic Baseline'}
+                          </p>
+                        </div>
+
+                        {/* Proposed Box */}
+                        <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-1.5">
+                          <span className="font-bold text-[var(--rzp-ai)] uppercase tracking-wider block text-[10px]">
+                            Proposed (Simulated)
+                          </span>
+                          <div className="text-xl font-black text-[var(--rzp-primary)]">
+                            {(
+                              (whatIfResult.simulated_metrics.simulated_selection_rate !== undefined
+                                ? whatIfResult.simulated_metrics.simulated_selection_rate
+                                : whatIfResult.simulated_metrics.conversion_rate !== undefined
+                                ? whatIfResult.simulated_metrics.conversion_rate
+                                : 0) * 100
+                            ).toFixed(1)}% Match
+                          </div>
+                          <p className="text-[11px] text-[var(--rzp-text-muted)]">
+                            {whatIfResult.simulated_metrics.average_score !== undefined
+                              ? `Avg Score: ${whatIfResult.simulated_metrics.average_score}`
+                              : 'Simulated Change'}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Proposed Box */}
-                      <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-lg text-xs space-y-1.5">
-                        <span className="font-bold text-[var(--rzp-ai)] uppercase tracking-wider block text-[10px]">
-                          Proposed (Simulated)
-                        </span>
-                        <div className="text-xl font-black text-[var(--rzp-primary)]">
-                          {(
-                            (whatIfResult.simulated_metrics.simulated_selection_rate !== undefined
-                              ? whatIfResult.simulated_metrics.simulated_selection_rate
-                              : whatIfResult.simulated_metrics.conversion_rate !== undefined
-                              ? whatIfResult.simulated_metrics.conversion_rate
-                              : 0) * 100
-                          ).toFixed(1)}% Match
-                        </div>
-                        <p className="text-[11px] text-[var(--rzp-text-muted)]">
-                          {whatIfResult.simulated_metrics.average_score !== undefined
-                            ? `Avg Score: ${whatIfResult.simulated_metrics.average_score}`
-                            : whatIfResult.simulated_metrics.average_order_value !== undefined
-                            ? `Simulated AOV: ${formatPriceInINR(whatIfResult.simulated_metrics.average_order_value)}`
-                            : 'Simulated Change'}
-                        </p>
+                      <div className="p-3 bg-gray-50 rounded-md border border-gray-100 text-xs text-[var(--rzp-text-secondary)]">
+                        <strong>Hypothesis Evaluated: </strong> {whatIfResult.hypothesis}
                       </div>
-                    </div>
 
-                    <div className="p-3 bg-gray-50 rounded-md border border-gray-100 text-xs text-[var(--rzp-text-secondary)]">
-                      <strong>Hypothesis Evaluated: </strong> {whatIfResult.hypothesis}
-                    </div>
-
-                    <div className="text-[11px] text-[var(--rzp-text-muted)] flex items-center justify-between pt-2 border-t border-gray-100">
-                      <span>In-Memory Evaluation</span>
-                      <span className="font-mono text-gray-500">ID: {whatIfResult.id.slice(0, 8)}...</span>
-                    </div>
-                  </CardContent>
-                </Card>
+                      <div className="text-[11px] text-[var(--rzp-text-muted)] flex items-center justify-between pt-2 border-t border-gray-100">
+                        <span>In-Memory Evaluation</span>
+                        <span className="font-mono text-gray-500">ID: {whatIfResult.id.slice(0, 8)}...</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
           </div>

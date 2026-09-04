@@ -254,7 +254,25 @@ export const ScenarioDecisionLog: React.FC<ScenarioDecisionLogProps> = ({
                 <Filter className="h-3.5 w-3.5 mr-1.5 text-indigo-600" /> 3. Candidate Funnel & Ranking
               </h4>
               <span className="text-[11px] text-[var(--rzp-text-muted)]">
-                {passedRankings.length} of {(item.rankings || []).length} products passed filters
+                {/* Use backend-provided totals when available (post-truncation-fix).
+                    Fall back to item.rankings.length for older results. */}
+                {item.total_products_evaluated != null ? (
+                  <>
+                    <span className="font-semibold text-emerald-700">{item.total_eligible ?? passedRankings.length}</span>
+                    {' eligible '}
+                    <span className="text-gray-400">· </span>
+                    <span className="font-semibold text-red-600">{item.total_disqualified ?? disqualifiedRankings.length}</span>
+                    {' disqualified'}
+                    <span className="text-gray-400"> of </span>
+                    <span className="font-semibold">{item.total_products_evaluated}</span>
+                    {' evaluated'}
+                    {(item.total_eligible ?? passedRankings.length) !== passedRankings.length || (item.total_disqualified ?? disqualifiedRankings.length) !== disqualifiedRankings.length ? (
+                      <span className="ml-1 text-[10px] text-gray-400">(showing {passedRankings.length + disqualifiedRankings.length} examples)</span>
+                    ) : null}
+                  </>
+                ) : (
+                  <>{passedRankings.length} of {(item.rankings || []).length} products passed filters</>
+                )}
               </span>
             </div>
 

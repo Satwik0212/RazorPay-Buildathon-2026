@@ -238,7 +238,200 @@ def run_simulation(
         for p in set(profiles)
     }
 
-    # 2 & 3. In-memory simulation over ALL candidates:
+    # 2. Route: Custom Buyer Simulation
+    # When req.custom_buyer is provided, bypass predefined persona/variant logic entirely.
+    # The existing simulation_engine.run_simulation(), ProductScorer, and FrictionDetector
+    # are used unchanged — only the weights and intent are merchant-specified.
+    if req.custom_buyer:
+        custom = req.custom_buyer
+
+        # Convert budget from Rupees (merchant-entered) to paise (engine currency)
+        max_budget_paise = custom.max_budget * 100 if custom.max_budget is not None else None
+
+        # Build intent dict matching the shape expected by FrictionDetector
+        custom_intent: Dict[str, Any] = {
+            "requirements": custom.requirements,
+        }
+        if max_budget_paise is not None:
+            custom_intent["max_budget"] = max_budget_paise
+        if custom.delivery_deadline_days is not None:
+            custom_intent["delivery_deadline_days"] = custom.delivery_deadline_days
+
+        # Use the merchant-specified weights directly (already normalised in schema)
+        custom_weights = dict(custom.weights)
+
+        sim_id = uuid.uuid4()
+        friction_summary: Dict[str, int] = {}
+        detailed_frictions: List[Dict[str, Any]] = []
+        persona_success_count: Dict[str, int] = {}
+        evaluations: List[Dict[str, Any]] = []
+
+        scenario_count = custom.scenario_count if custom.scenario_count else req.scenario_count
+
+        for i in range(scenario_count):
+            # For multiple runs the persona_name includes the run index for traceability
+            if scenario_count > 1:
+                persona_name = f"CUSTOM:{custom.name}:run_{i + 1}"
+            else:
+                persona_name = f"CUSTOM:{custom.name}"
+
+            sim_output = simulation_engine.run_simulation(
+                merchant_id=str(merchant_id),
+                persona_weights=custom_weights,
+                intent=custom_intent,
+                catalogue=catalogue,
+                persona_name=persona_name,
+            )
+
+            selected_id = (
+                uuid.UUID(sim_output["selected_product_id"])
+                if sim_output["selected_product_id"]
+                else None
+            )
+
+            for f in sim_output.get("frictions", []):
+                reason_name = f.get("reason", "UNKNOWN")
+                friction_summary[reason_name] = friction_summary.get(reason_name, 0) + 1
+                detailed_frictions.append({
+                    "product_id": f.get("product_id"),
+                    "reason": reason_name,
+                    "count": 1,
+                })
+
+            if sim_output["constraints_satisfied"]:
+                persona_success_count[persona_name] = (
+                    persona_success_count.get(persona_name, 0) + 1
+                )
+
+            evaluations.append({
+                "full_persona_name": persona_name,
+                "selected_id": selected_id,
+                "weights": custom_weights,
+                "intent_dict": custom_intent,
+                "sim_output": sim_output,
+            })
+
+        # Summary metrics — identical structure to predefined path
+        total_simulated = len(evaluations)
+        successful_matches = sum(
+            1 for e in evaluations
+            if e["sim_output"]["constraints_satisfied"] and e["selected_id"] is not None
+        )
+        failed_matches = total_simulated - successful_matches
+        satisfaction_rate = round(successful_matches / max(total_simulated, 1), 3)
+        avg_score = round(
+            sum(e["sim_output"]["score"] for e in evaluations) / max(total_simulated, 1), 3
+        )
+
+        summary_metrics = {
+            "buyers_simulated": total_simulated,
+            "successful_matches": successful_matches,
+            "failed_matches": failed_matches,
+            "constraint_satisfaction_rate": satisfaction_rate,
+            "average_score": avg_score,
+            "friction_distribution": friction_summary,
+            "persona_success_rates": {
+                p: round(
+                    persona_success_count.get(p, 0)
+                    / max(sum(1 for e in evaluations if e["full_persona_name"] == p), 1),
+                    2,
+                )
+                for p in set(e["full_persona_name"] for e in evaluations)
+            },
+            "metric_type": "CUSTOM SIMULATION",
+            "custom_buyer_name": custom.name,
+        }
+
+        results: List[SimulationResultItem] = []
+        db_results = []
+
+        for ev in evaluations:
+            sim_out = ev["sim_output"]
+            sel_id = ev["selected_id"]
+            pname = ev["full_persona_name"]
+            w = ev["weights"]
+            idict = ev["intent_dict"]
+
+            full_rankings = sim_out["rankings"]
+            total_evaluated = len(full_rankings)
+            total_eligible_count = sum(1 for r in full_rankings if r.get("passed") is True)
+            total_disqualified_count = sum(1 for r in full_rankings if r.get("passed") is False)
+
+            truncated_rankings = truncate_rankings(
+                rankings=full_rankings,
+                selected_product_id=sel_id,
+                max_passed=20,
+                max_disqualified=10,
+            )
+
+            results.append(SimulationResultItem(
+                persona_name=pname,
+                selected_product_id=sel_id,
+                score=sim_out["score"],
+                constraints_satisfied=sim_out["constraints_satisfied"],
+                reason_codes=sim_out["reason_codes"],
+                frictions=sim_out["frictions"],
+                rankings=truncated_rankings,
+                explanation=sim_out["explanation"],
+                intent=idict,
+                persona_weights=w,
+                total_products_evaluated=total_evaluated,
+                total_eligible=total_eligible_count,
+                total_disqualified=total_disqualified_count,
+            ))
+
+            db_results.append(SimulationResult(
+                id=uuid.uuid4(),
+                persona_name=pname,
+                selected_product_id=sel_id,
+                score=sim_out["score"],
+                constraints_satisfied=sim_out["constraints_satisfied"],
+                reason_codes=sim_out["reason_codes"],
+                frictions=sim_out["frictions"],
+                rankings=truncated_rankings,
+                explanation=sim_out["explanation"],
+            ))
+
+        buyer_profiles_label = [f"CUSTOM:{custom.name}"]
+
+        sim_run = SimulationRun(
+            id=sim_id,
+            merchant_id=merchant_id,
+            status="COMPLETED",
+            scenario_count=total_simulated,
+            buyer_profiles=buyer_profiles_label,
+            summary_metrics=summary_metrics,
+            results=db_results,
+        )
+        db.add(sim_run)
+        db.commit()
+
+        if detailed_frictions:
+            from app.services.optimization.recommendation_service import recommendation_service
+            recommendation_service.generate_recommendations(
+                db,
+                merchant_id,
+                detailed_frictions,
+                simulation_run_id=sim_id,
+                scenario_count=total_simulated,
+            )
+
+        return SimulationResponse(
+            simulation_id=sim_id,
+            merchant_id=merchant_id,
+            status="COMPLETED",
+            scenario_count=total_simulated,
+            buyer_profiles=buyer_profiles_label,
+            summary_metrics=summary_metrics,
+            results=results,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 3. Route: Predefined Persona Simulation (original logic, unchanged)
+    # ─────────────────────────────────────────────────────────────────────────
+    # If UI doesn't provide profiles, fallback to available DB personas or defaults
+
     # Detect hard constraints, soft friction, calculate scores, deterministic tie-breaking, select winners
     for index in range(req.scenario_count):
         base_profile_name = profiles[index % len(profiles)]
@@ -347,8 +540,13 @@ def run_simulation(
         weights = ev["weights"]
         intent_dict = ev["intent_dict"]
 
+        full_rankings = sim_out["rankings"]
+        total_evaluated = len(full_rankings)
+        total_eligible_count = sum(1 for r in full_rankings if r.get("passed") is True)
+        total_disqualified_count = sum(1 for r in full_rankings if r.get("passed") is False)
+
         truncated_rankings = truncate_rankings(
-            rankings=sim_out["rankings"],
+            rankings=full_rankings,
             selected_product_id=sel_id,
             max_passed=20,
             max_disqualified=10,
@@ -365,6 +563,9 @@ def run_simulation(
             explanation=sim_out["explanation"],
             intent=intent_dict,
             persona_weights=weights,
+            total_products_evaluated=total_evaluated,
+            total_eligible=total_eligible_count,
+            total_disqualified=total_disqualified_count,
         ))
 
         db_results.append(SimulationResult(

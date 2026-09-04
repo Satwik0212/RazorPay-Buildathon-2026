@@ -68,30 +68,78 @@ class ProductService:
         if product.merchant_id != merchant_id:
             raise ForbiddenError("You cannot modify products of another merchant.")
 
-        if req.name is not None:
+        before_state = {}
+        after_state = {}
+        changed = False
+
+        if req.name is not None and req.name != product.name:
+            before_state["name"] = product.name
             product.name = req.name
-        if req.description is not None:
+            after_state["name"] = product.name
+            changed = True
+            
+        if req.description is not None and req.description != product.description:
+            before_state["description"] = product.description
             product.description = req.description
-        if req.category is not None:
+            after_state["description"] = product.description
+            changed = True
+            
+        if req.category is not None and req.category != product.category:
+            before_state["category"] = product.category
             product.category = req.category
-        if req.price is not None:
+            after_state["category"] = product.category
+            changed = True
+            
+        if req.price is not None and req.price != product.price:
+            before_state["price"] = product.price
             product.price = req.price
-        if req.currency is not None:
+            after_state["price"] = product.price
+            changed = True
+            
+        if req.currency is not None and req.currency != product.currency:
+            before_state["currency"] = product.currency
             product.currency = req.currency
+            after_state["currency"] = product.currency
+            changed = True
+            
         if req.metadata is not None:
-            product.product_metadata = req.metadata
-        if req.is_active is not None:
+            old_meta = product.product_metadata or {}
+            if req.metadata != old_meta:
+                # To keep the audit compact, let's only record the keys that changed
+                changed_keys = [k for k in set(req.metadata.keys()).union(old_meta.keys()) if req.metadata.get(k) != old_meta.get(k)]
+                if changed_keys:
+                    before_meta = {k: old_meta.get(k) for k in changed_keys}
+                    after_meta = {k: req.metadata.get(k) for k in changed_keys}
+                    before_state["metadata"] = before_meta
+                    after_state["metadata"] = after_meta
+                    
+                    product.product_metadata = req.metadata
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(product, "product_metadata")
+                    changed = True
+                    
+        if req.is_active is not None and req.is_active != product.is_active:
+            before_state["is_active"] = product.is_active
             product.is_active = req.is_active
+            after_state["is_active"] = product.is_active
+            changed = True
+
+        if not changed:
+            return product
 
         updated = self.repo.update_product(product)
 
         self.audit_service.log_event(
-            event_type=AuditEventType.PRODUCT_UPDATED.value,
-            actor_type=ActorType.MERCHANT.value,
-            entity_type="product",
+            event_type="PRODUCT_UPDATED",
+            actor_type="MERCHANT",
+            entity_type="PRODUCT",
             merchant_id=merchant_id,
             entity_id=updated.id,
-            event_data={"name": updated.name, "price": updated.price, "is_active": updated.is_active},
+            event_data={
+                "before_state": before_state,
+                "after_state": after_state,
+                "action_performed": "UPDATE_PRODUCT"
+            },
         )
         return updated
 

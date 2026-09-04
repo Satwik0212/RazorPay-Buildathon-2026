@@ -1,6 +1,8 @@
 import copy
 from typing import Dict, Any, List, Optional
 from app.simulation.engine import simulation_engine
+from app.simulation.scoring import ProductScorer
+from app.simulation.friction import FrictionDetector
 from app.models.buyer_persona import BuyerPersona
 
 
@@ -109,6 +111,27 @@ class WhatIfService:
         baseline_matches = 0
         proposed_matches = 0
 
+        # Target-product-level tracking (only when a specific product is targeted)
+        target_baseline_scores: List[float] = []
+        target_proposed_scores: List[float] = []
+        target_baseline_eligible = 0
+        target_proposed_eligible = 0
+        has_target = bool(target_product_id)
+
+        # Locate the baseline and proposed target product objects once
+        target_b_product = None
+        target_p_product = None
+        if has_target:
+            target_b_product = next(
+                (p for p in baseline_catalogue if str(p.get("id")) == target_product_id), None
+            )
+            target_p_product = next(
+                (p for p in modified_catalogue if str(p.get("id")) == target_product_id), None
+            )
+            # If product not found, clear the flag so we don't mislead
+            if not target_b_product or not target_p_product:
+                has_target = False
+
         for sc in scenarios:
             b_res = simulation_engine.run_simulation(
                 merchant_id=merchant_id,
@@ -137,6 +160,28 @@ class WhatIfService:
             else:
                 proposed_scores.append(0.0)
 
+            # Target-product scoring: evaluate THIS product's score and eligibility
+            # under each persona scenario (independent of whether it wins catalogue-wide)
+            if has_target:
+                b_hard = FrictionDetector.detect_hard_constraints(target_b_product, sc["intent"])
+                p_hard = FrictionDetector.detect_hard_constraints(target_p_product, sc["intent"])
+                b_eligible = len(b_hard) == 0
+                p_eligible = len(p_hard) == 0
+
+                b_score = ProductScorer.calculate_score(
+                    target_b_product, sc["weights"],
+                    max_budget_minor=sc["intent"].get("max_budget")
+                )
+                p_score = ProductScorer.calculate_score(
+                    target_p_product, sc["weights"],
+                    max_budget_minor=sc["intent"].get("max_budget")
+                )
+
+                target_baseline_eligible += (1 if b_eligible else 0)
+                target_proposed_eligible += (1 if p_eligible else 0)
+                target_baseline_scores.append(b_score)
+                target_proposed_scores.append(p_score)
+
         total_scenarios = len(scenarios)
         b_rate = round(baseline_matches / max(total_scenarios, 1), 3)
         p_rate = round(proposed_matches / max(total_scenarios, 1), 3)
@@ -151,7 +196,7 @@ class WhatIfService:
         else:
             delta_pct = 0.0
 
-        return {
+        result: Dict[str, Any] = {
             "hypothesis": hypothesis,
             "modifications": modifications,
             "baseline_metrics": {
@@ -171,6 +216,35 @@ class WhatIfService:
             "delta_percentage": delta_pct,
             "note": "SIMULATED RESULT: Evaluated in-memory. No production data modified.",
         }
+
+        # Add target-product-level metrics when a specific product is targeted
+        if has_target and target_baseline_scores:
+            tb_avg = round(sum(target_baseline_scores) / len(target_baseline_scores), 3)
+            tp_avg = round(sum(target_proposed_scores) / len(target_proposed_scores), 3)
+            tb_eligible_rate = round(target_baseline_eligible / max(total_scenarios, 1), 3)
+            tp_eligible_rate = round(target_proposed_eligible / max(total_scenarios, 1), 3)
+            score_delta = round(tp_avg - tb_avg, 3)
+            if tb_avg > 0:
+                score_delta_pct = round(((tp_avg - tb_avg) / tb_avg) * 100.0, 1)
+            elif tp_avg > 0:
+                score_delta_pct = 100.0
+            else:
+                score_delta_pct = 0.0
+
+            result["target_product_metrics"] = {
+                "product_id": target_product_id,
+                "baseline_avg_score": tb_avg,
+                "proposed_avg_score": tp_avg,
+                "score_delta": score_delta,
+                "score_delta_pct": score_delta_pct,
+                "baseline_eligible_rate": tb_eligible_rate,
+                "proposed_eligible_rate": tp_eligible_rate,
+                "eligibility_delta": round(tp_eligible_rate - tb_eligible_rate, 3),
+                "scenarios_evaluated": total_scenarios,
+                "note": "Per-persona score and eligibility for the target product only. In-memory, non-mutating.",
+            }
+
+        return result
 
 
 what_if_service = WhatIfService()

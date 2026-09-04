@@ -2958,3 +2958,8 @@ trust
 The database is not merely storage.
 
 It is the **state and integrity backbone of the entire AI-commerce system**.
+
+
+## September 4 Update
+- `price` field in `products` is authoritative and strictly treated as minor units (paise) across all backend calculations.
+- `Inventory.available_quantity` is authoritatively joined via a single query for simulation. A `None` value represents unmanaged inventory (no friction).

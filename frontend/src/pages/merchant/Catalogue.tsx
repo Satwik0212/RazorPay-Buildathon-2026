@@ -62,7 +62,7 @@ export const Catalogue = () => {
   const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null);
 
   type ModalState = {
-    type: 'ADD' | 'EDIT' | 'INVENTORY' | 'DEACTIVATE' | 'REACTIVATE' | 'DETAIL' | null;
+    type: 'ADD' | 'EDIT' | 'INVENTORY' | 'DEACTIVATE' | 'REACTIVATE' | 'DETAIL' | 'SET_DELIVERY' | null;
     product?: Product;
   };
   const [modalState, setModalState] = useState<ModalState>({ type: null });
@@ -158,6 +158,8 @@ export const Catalogue = () => {
       });
     } else if (type === 'INVENTORY' && product) {
       setFormData({ available_quantity: product.inventory?.available_quantity || 0 });
+    } else if (type === 'SET_DELIVERY' && product) {
+      setFormData({ delivery_days: product.metadata?.delivery_days || '' });
     }
   };
 
@@ -205,6 +207,14 @@ export const Catalogue = () => {
         });
       } else if (modalState.type === 'INVENTORY' && modalState.product) {
         await productsApi.updateInventory(modalState.product.id, parseInt(formData.available_quantity));
+      } else if (modalState.type === 'SET_DELIVERY' && modalState.product) {
+        const updatedMetadata = {
+          ...(modalState.product.metadata || {}),
+          delivery_days: parseInt(formData.delivery_days)
+        };
+        await productsApi.updateProduct(modalState.product.id, {
+          metadata: updatedMetadata
+        });
       } else if (modalState.type === 'DEACTIVATE' && modalState.product) {
         await productsApi.deactivateProduct(modalState.product.id);
       } else if (modalState.type === 'REACTIVATE' && modalState.product) {
@@ -316,6 +326,7 @@ export const Catalogue = () => {
                 <tr>
                   <th className="px-6 py-4 font-medium">Product</th>
                   <th className="px-6 py-4 font-medium">Completeness</th>
+                  <th className="px-6 py-4 font-medium">Delivery SLA</th>
                   <th className="px-6 py-4 font-medium">Price</th>
                   <th className="px-6 py-4 font-medium">Inventory</th>
                   <th className="px-6 py-4 text-right font-medium">Actions</th>
@@ -370,6 +381,29 @@ export const Catalogue = () => {
                             </div>
                           )}
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {product.metadata?.delivery_days != null ? (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5 font-medium text-[var(--rzp-text)]">
+                              <span className="text-lg leading-none">🚚</span>
+                              <span>{product.metadata.delivery_days} days</span>
+                            </div>
+                            <Button variant="ghost" size="sm" className="h-auto p-0 mt-1 text-xs text-[var(--rzp-primary)] justify-start hover:bg-transparent hover:underline" onClick={(e) => { e.stopPropagation(); openModal('SET_DELIVERY', product); }}>
+                              Edit SLA
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5 text-amber-600">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span className="text-sm font-medium">Not configured</span>
+                            </div>
+                            <Button variant="ghost" size="sm" className="h-auto p-0 mt-1 text-xs text-[var(--rzp-primary)] justify-start hover:bg-transparent hover:underline" onClick={(e) => { e.stopPropagation(); openModal('SET_DELIVERY', product); }}>
+                              Set delivery SLA
+                            </Button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 font-medium whitespace-nowrap">
                         {formatPrice(product.price)}
@@ -454,6 +488,7 @@ export const Catalogue = () => {
                 {modalState.type === 'INVENTORY' && 'Adjust Inventory'}
                 {modalState.type === 'DEACTIVATE' && 'Deactivate Product'}
                 {modalState.type === 'REACTIVATE' && 'Reactivate Product'}
+                {modalState.type === 'SET_DELIVERY' && 'Set Delivery SLA'}
               </h2>
               <Button variant="ghost" size="sm" onClick={closeModal} className="h-8 w-8 p-0 shrink-0 rounded-full hover:bg-gray-100">
                 <X className="h-5 w-5 text-gray-500" />
@@ -513,6 +548,32 @@ export const Catalogue = () => {
                 </form>
               )}
 
+              {modalState.type === 'SET_DELIVERY' && (
+                <form id="product-form" onSubmit={handleSubmit} className="space-y-4">
+                  <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 mb-4 border border-gray-200">
+                    Target: <strong>{modalState.product?.name}</strong>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Delivery SLA (Days)</label>
+                    <select
+                      required
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      value={formData.delivery_days || ''}
+                      onChange={e => setFormData({...formData, delivery_days: e.target.value})}
+                    >
+                      <option value="" disabled>Select delivery days...</option>
+                      <option value="1">1 day (Speed/Express)</option>
+                      <option value="2">2 days (Standard)</option>
+                      <option value="3">3 days</option>
+                      <option value="4">4 days</option>
+                      <option value="5">5 days</option>
+                      <option value="7">7 days</option>
+                    </select>
+                    <p className="text-xs text-[var(--rzp-text-muted)] mt-1">This value is evaluated by AI Buyer scenarios (e.g., Speed Priority).</p>
+                  </div>
+                </form>
+              )}
+
               {(modalState.type === 'DEACTIVATE' || modalState.type === 'REACTIVATE') && (
                 <form id="product-form" onSubmit={handleSubmit} className="space-y-4">
                   <p className="text-sm text-gray-700">
@@ -528,7 +589,8 @@ export const Catalogue = () => {
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 {modalState.type === 'DEACTIVATE' ? 'Deactivate' : 
                  modalState.type === 'REACTIVATE' ? 'Reactivate' : 
-                 modalState.type === 'INVENTORY' ? 'Update Inventory' : 'Save Details'}
+                 modalState.type === 'INVENTORY' ? 'Update Inventory' : 
+                 modalState.type === 'SET_DELIVERY' ? 'Save Delivery' : 'Save Details'}
               </Button>
             </div>
           </Card>

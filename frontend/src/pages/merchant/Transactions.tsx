@@ -38,12 +38,12 @@ export const Transactions = () => {
 
   const filteredLogs = logs.filter(log => {
     if (filterType === 'ALL') return true;
-    if (filterType === 'RECOMMENDATIONS') return log.event_type === 'RECOMMENDATION_APPLIED';
+    if (filterType === 'RECOMMENDATIONS') return log.event_type === 'RECOMMENDATION_APPLIED' || log.event_type === 'PRODUCT_UPDATED';
     if (filterType === 'ORDERS') return log.event_type?.includes('ORDER') || log.event_type?.includes('PAYMENT');
     return true;
   });
 
-  const recAppliedCount = logs.filter(l => l.event_type === 'RECOMMENDATION_APPLIED').length;
+  const recAppliedCount = logs.filter(l => l.event_type === 'RECOMMENDATION_APPLIED' || l.event_type === 'PRODUCT_UPDATED').length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -126,19 +126,19 @@ export const Transactions = () => {
       ) : (
         <div className="space-y-4">
           {filteredLogs.map((log: any, idx: number) => {
-            const isRecApplied = log.event_type === 'RECOMMENDATION_APPLIED';
+            const hasMutationState = log.event_type === 'RECOMMENDATION_APPLIED' || log.event_type === 'PRODUCT_UPDATED';
             const eventData = log.event_data || {};
 
             return (
               <Card key={log.id || idx} className={`border transition-all hover:shadow-xs ${
-                isRecApplied ? 'border-purple-200 bg-purple-50/15' : 'border-[var(--rzp-border)]'
+                hasMutationState ? 'border-purple-200 bg-purple-50/15' : 'border-[var(--rzp-border)]'
               }`}>
                 <CardContent className="p-5 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
                     <div className="flex items-center space-x-2.5">
-                      {isRecApplied ? (
+                      {hasMutationState ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300">
-                          <FileCheck2 className="h-3.5 w-3.5 mr-1 text-purple-700" /> RECOMMENDATION_APPLIED
+                          <FileCheck2 className="h-3.5 w-3.5 mr-1 text-purple-700" /> {log.event_type}
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
@@ -165,7 +165,7 @@ export const Transactions = () => {
                   </div>
 
                   {/* Detail Content */}
-                  {isRecApplied ? (
+                  {hasMutationState ? (
                     <div className="space-y-2 text-xs">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 rounded-lg border border-purple-100">
                         <div>

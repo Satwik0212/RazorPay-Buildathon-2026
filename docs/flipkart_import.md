@@ -54,3 +54,7 @@ The importer is fully idempotent. On repeated executions, it checks the database
 ## Known Limitations
 - The parser discards specifications that do not strictly follow the `{"key"=>"...", "value"=>"..."}` format found in the dataset.
 - Because duplicate names are dropped immediately, if the first occurrence of a product name in the CSV is missing a price, the entire product name is permanently excluded from that import run.
+
+
+## September 4 Update
+- No changes to Flipkart ingestion, but imported metadata (like `product_rating` vs `overall_rating` or descriptive `warranty`) is now aggressively normalized in `MetadataNormalizer` before simulation.

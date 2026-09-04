@@ -279,3 +279,7 @@ npm run dev
 
 **READINESS: 100% READY FOR POSTGRESQL MIGRATION.**  
 The repository's persistence models, transactional boundaries, repository patterns, and concurrency safety mechanisms are fully portable and ready for PostgreSQL deployment.
+
+
+## September 4 Update
+- Verified: `ProductRepository.get_active_catalogue_for_merchant` retrieves 100% of active products with true inventory state (unmanaged inventory returns `None`, not `10`).
