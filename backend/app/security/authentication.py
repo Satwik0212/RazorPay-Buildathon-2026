@@ -30,18 +30,28 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: uuid.UUID, role: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    user_id: uuid.UUID,
+    role: str,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    expires_delta: Optional[timedelta] = None
+) -> str:
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     payload = {
         "sub": str(user_id),
         "role": role,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
+    if name:
+        payload["name"] = name
+    if email:
+        payload["email"] = email
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -61,12 +71,12 @@ def get_current_user(
 ) -> User:
     if not credentials:
         raise UnauthorizedError("Missing Bearer authorization header.")
-    
+
     payload = decode_access_token(credentials.credentials)
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise UnauthorizedError("Invalid token claims.")
-    
+
     try:
         user_id = uuid.UUID(user_id_str)
     except ValueError as exc:
@@ -85,7 +95,7 @@ def get_current_merchant(
 ) -> Merchant:
     if user.role != UserRole.MERCHANT.value and user.role != UserRole.ADMIN.value:
         raise ForbiddenError("Merchant role required for this action.")
-    
+
     repo = MerchantRepository(db)
     merchant = repo.get_merchant_by_user_id(user.id)
     if not merchant or not merchant.is_active:
@@ -99,7 +109,7 @@ def get_current_customer(
 ) -> Customer:
     if user.role != UserRole.CUSTOMER.value and user.role != UserRole.ADMIN.value:
         raise ForbiddenError("Customer role required for this action.")
-    
+
     repo = CustomerRepository(db)
     customer = repo.get_by_user_id(user.id)
     if not customer:

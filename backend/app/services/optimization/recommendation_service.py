@@ -27,7 +27,7 @@ class RecommendationService:
         Persists them to the database.
         """
         recommendations: List[OptimizationRecommendation] = []
-        
+
         # Group friction by reason
         reason_groups: Dict[str, List[Dict[str, Any]]] = {}
         for event in friction_events:
@@ -43,16 +43,16 @@ class RecommendationService:
         # Process each reason group
         for reason, events in reason_groups.items():
             total_frictions = sum(e.get("count", 1) for e in events)
-            
+
             # Count affected products and find the most affected one
             product_counts: Dict[str, int] = {}
             for e in events:
                 p_id = e.get("product_id")
                 if p_id:
                     product_counts[p_id] = product_counts.get(p_id, 0) + e.get("count", 1)
-            
+
             unique_product_count = len(product_counts)
-            
+
             # Use the most affected product as the primary example for What-If simulations
             top_product_id_str = None
             if product_counts:
@@ -71,7 +71,7 @@ class RecommendationService:
             title = None
             rec_reason = None
             action_data = None
-            
+
             # Deterministic, empirical impact scoring rather than fabricated percentages
             impact = round(total_frictions / max(total_overall_frictions, 1), 3)
             # Confidence grows logarithmically with evidence volume up to 1.0
@@ -79,56 +79,78 @@ class RecommendationService:
 
             # Map reason to recommendation details
             if reason == FrictionReason.DELIVERY_UNCLEAR.value or reason == "DELIVERY_UNCLEAR":
+                # For DELIVERY_UNCLEAR (soft friction), there might not be a strict deadline in intent,
+                # but if there happens to be one (or from other events), we try to extract it.
+                deadlines = [e.get("delivery_deadline_days") for e in events if e.get("delivery_deadline_days") is not None]
+
+                # If there are no deadlines, preserve the existing sensible fallback rather than inventing
+                min_deadline = min(deadlines) if deadlines else 2
+
                 rec_type = "DELIVERY_CLARITY"
                 title = "Add Explicit Delivery Timeline"
                 rec_reason = f"{total_frictions} simulated speed-focused buyer drop-offs occurred due to missing or delayed delivery promises across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Configure 'delivery_days: 2' or express shipping in product metadata.",
+                    "suggested_change": f"Configure 'delivery_days: {min_deadline}' or express shipping in product metadata.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "DELIVERY_UNCLEAR",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
-                    "new_delivery_days": 2,
-                    "before_state_description": "Unknown or >2 days",
-                    "after_state_description": "2 days"
+                    "new_delivery_days": min_deadline,
+                    "before_state_description": f"Unknown or >{min_deadline} days",
+                    "after_state_description": f"{min_deadline} day{'s' if min_deadline != 1 else ''}"
                 }
 
             elif reason == "DELIVERY_UNKNOWN" or (hasattr(FrictionReason, "DELIVERY_UNKNOWN") and reason == FrictionReason.DELIVERY_UNKNOWN.value):
+                # Calculate minimum required deadline from evidence
+                deadlines = [e.get("delivery_deadline_days") for e in events if e.get("delivery_deadline_days") is not None]
+
+                if not deadlines:
+                    continue
+
+                min_deadline = min(deadlines)
+
                 rec_type = "DELIVERY_UNKNOWN"
                 title = "Add Structured Delivery Days"
                 rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because delivery requirements could not be verified across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Add structured 'delivery_days: 2' information to metadata.",
+                    "suggested_change": f"Add structured 'delivery_days: {min_deadline}' information to metadata.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "DELIVERY_UNKNOWN",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
-                    "new_delivery_days": 2,
+                    "new_delivery_days": min_deadline,
                     "before_state_description": "Unknown (no delivery_days in metadata)",
-                    "after_state_description": "2 days (structured)"
+                    "after_state_description": f"{min_deadline} day{'s' if min_deadline != 1 else ''} (structured)"
                 }
 
             elif reason == "DELIVERY_TOO_SLOW" or (hasattr(FrictionReason, "DELIVERY_TOO_SLOW") and reason == FrictionReason.DELIVERY_TOO_SLOW.value):
+                # Calculate minimum required deadline from evidence
+                deadlines = [e.get("delivery_deadline_days") for e in events if e.get("delivery_deadline_days") is not None]
+
+                # If there are no relevant delivery failures with a deadline, do not invent a recommendation
+                if not deadlines:
+                    continue
+
+                min_deadline = min(deadlines)
+
                 rec_type = "DELIVERY_TOO_SLOW"
                 title = "Reduce Delivery Time"
                 rec_reason = f"{total_frictions} simulated buyer drop-offs occurred because delivery time exceeded strict deadlines across {unique_product_count} products."
                 action_data = {
-                    "suggested_change": "Reduce delivery time to 1 day (express shipping) to satisfy speed-focused SLA constraints.",
+                    "suggested_change": f"Reduce delivery time to {min_deadline} day{'s' if min_deadline != 1 else ''} to satisfy strict SLA constraints.",
                     "friction_count": total_frictions,
                     "affected_products_count": unique_product_count,
                     "friction_type": "DELIVERY_TOO_SLOW",
                     "affected_product_ids": affected_product_ids,
                     "total_overall_frictions": total_overall_frictions,
                     "scenario_count": scenario_count,
-                    # Target 1 day — eliminates all speed persona SLA friction (deadline is ≤2 days;
-                    # products with delivery_days=2 already fail a ≤1 day constraint, so target must be 1).
-                    "new_delivery_days": 1,
-                    "before_state_description": ">1 day (current delivery exceeds speed persona SLA)",
-                    "after_state_description": "1 day (express SLA)"
+                    "new_delivery_days": min_deadline,
+                    "before_state_description": f">{min_deadline} day{'s' if min_deadline != 1 else ''} (current delivery exceeds buyer SLA)",
+                    "after_state_description": f"{min_deadline} day{'s' if min_deadline != 1 else ''} (SLA satisfied)"
                 }
 
             elif reason == FrictionReason.PRICE_MISMATCH.value or reason == "PRICE_MISMATCH":
@@ -253,7 +275,7 @@ class RecommendationService:
                     recommendations.append(new_rec)
 
         db.commit()
-        
+
         # Sort recommendations by impact and friction count (highest first)
         recommendations.sort(key=lambda r: (r.expected_simulated_impact, r.action_data.get("friction_count", 0)), reverse=True)
         return recommendations

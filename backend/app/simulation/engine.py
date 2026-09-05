@@ -38,12 +38,15 @@ class SimulationEngine:
             if hard_friction:
                 friction_names = [f.value for f in hard_friction]
                 for fn in friction_names:
-                    observed_frictions.append({
+                    f_event = {
                         "product_id": p_id,
                         "product_name": p_name,
                         "type": "HARD_CONSTRAINT",
                         "reason": fn,
-                    })
+                    }
+                    if intent.get("delivery_deadline_days") is not None:
+                        f_event["delivery_deadline_days"] = intent.get("delivery_deadline_days")
+                    observed_frictions.append(f_event)
                 all_evaluated_rankings.append({
                     "product_id": p_id,
                     "product_name": p_name,
@@ -51,6 +54,8 @@ class SimulationEngine:
                     "rank": 999,
                     "frictions": friction_names,
                     "passed": False,
+                    "price": product.get("price"),
+                    "category": product.get("category"),
                 })
                 continue
 
@@ -66,12 +71,13 @@ class SimulationEngine:
                 })
 
             # 3. Preference-weighted score calculation
-            score = ProductScorer.calculate_score(product, persona_weights, max_budget)
+            score, breakdown = ProductScorer.calculate_score_with_breakdown(product, persona_weights, max_budget)
 
             candidates.append({
                 "product_id": p_id,
                 "product_name": p_name,
                 "score": score,
+                "score_breakdown": breakdown,
                 "friction_reasons": soft_friction_names,
                 "product": product,
             })
@@ -90,6 +96,9 @@ class SimulationEngine:
                 "rank": i + 1,
                 "frictions": c["friction_reasons"],
                 "passed": True,
+                "price": c["product"].get("price"),
+                "category": c["product"].get("category"),
+                "score_breakdown": c.get("score_breakdown"),
             })
 
         # Append failed products at the end
@@ -97,6 +106,10 @@ class SimulationEngine:
 
         selected_product_id = None
         selected_score = 0.0
+        selected_score_breakdown = None
+        selected_product_name = None
+        selected_product_price = None
+        selected_product_category = None
         reason_codes = []
         explanation = ""
         constraints_satisfied = False
@@ -105,6 +118,10 @@ class SimulationEngine:
             best = candidates[0]
             selected_product_id = best["product_id"]
             selected_score = best["score"]
+            selected_score_breakdown = best.get("score_breakdown")
+            selected_product_name = best["product_name"]
+            selected_product_price = best["product"].get("price")
+            selected_product_category = best["product"].get("category")
             constraints_satisfied = True
 
             # Reason codes
@@ -127,7 +144,7 @@ class SimulationEngine:
                     all_frictions.extend(r.get("frictions", []))
                 if all_frictions:
                     dominant_friction = Counter(all_frictions).most_common(1)[0][0]
-                    
+
             explanation = (
                 f"SIMULATED: {persona_name} rejected all {len(catalogue)} products. "
                 f"Dominant reason: {dominant_friction}."
@@ -139,6 +156,10 @@ class SimulationEngine:
             "persona_name": persona_name,
             "selected_product_id": selected_product_id,
             "score": selected_score,
+            "score_breakdown": selected_score_breakdown,
+            "selected_product_name": selected_product_name,
+            "selected_product_price": selected_product_price,
+            "selected_product_category": selected_product_category,
             "constraints_satisfied": constraints_satisfied,
             "reason_codes": reason_codes,
             "frictions": observed_frictions,

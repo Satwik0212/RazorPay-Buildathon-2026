@@ -20,6 +20,7 @@ from app.api.v1.optimization.recommendations import router as recommendations_ro
 from app.api.v1.optimization.what_if import router as what_if_router
 from app.api.v1.optimization.campaigns import router as campaigns_router
 from app.api.v1.analytics import router as analytics_router
+from app.api.v1.catalogue_import import router as catalogue_import_router
 
 api_v1_router = APIRouter()
 
@@ -37,6 +38,7 @@ api_v1_router.include_router(payments_router)
 api_v1_router.include_router(webhooks_router)
 api_v1_router.include_router(audit_router)
 api_v1_router.include_router(analytics_router)
+api_v1_router.include_router(catalogue_import_router)
 
 # Shared AI / Buyer / Simulation Boundaries
 api_v1_router.include_router(buyer_intents_router)

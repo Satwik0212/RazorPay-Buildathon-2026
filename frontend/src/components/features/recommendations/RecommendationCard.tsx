@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Sparkles, 
-  CheckCircle2, 
-  XCircle, 
-  Package, 
-  TestTube, 
-  ArrowRight, 
-  Clock, 
+import {
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  Package,
+  TestTube,
+  ArrowRight,
+  Clock,
   RotateCcw,
   Check,
   FileCheck2,
@@ -18,9 +18,9 @@ import {
 import { Card, CardHeader, CardContent, CardFooter } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import type { Recommendation, Product } from '../../../types';
-import { 
-  getRecommendationCategory, 
-  getRecommendationSeverity, 
+import {
+  getRecommendationCategory,
+  getRecommendationSeverity,
   getTargetPersonas,
   getRecommendationFieldDetails,
   formatPriceInINR
@@ -52,6 +52,11 @@ export const RecommendationCard: React.FC<RecommendationCardProps> = ({
   const isProposed = recommendation.status === 'PROPOSED';
 
   const frictionCount = Number(recommendation.action_data?.friction_count) || 1;
+  const totalOverallFrictions = Number(recommendation.action_data?.total_overall_frictions) || 0;
+  const hasEvidence = totalOverallFrictions > 0;
+  const evidencePercentage = hasEvidence
+    ? Math.round((frictionCount / totalOverallFrictions) * 100)
+    : 0;
 
   const handleStatusUpdate = async (newStatus: string) => {
     setUpdating(true);
@@ -86,6 +91,15 @@ export const RecommendationCard: React.FC<RecommendationCardProps> = ({
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${severityBadgeClass}`}>
               {severityLabel}
             </span>
+            {hasEvidence && (
+              <span
+                className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border border-blue-200 bg-blue-50 text-blue-700 flex items-center cursor-help"
+                title="Based on how frequently this friction appeared across simulated buyer scenarios."
+              >
+                <TestTube className="h-3 w-3 mr-1" />
+                Supported by {evidencePercentage}% of observed friction
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-1.5">

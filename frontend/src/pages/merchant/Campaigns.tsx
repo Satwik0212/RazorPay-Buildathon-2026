@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { 
-  Sparkles, 
+import {
+  Sparkles,
   Megaphone,
   Loader2,
   CheckCircle2,
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { campaignsApi } from '../../api/campaigns';
 import { productsApi } from '../../api/products';
-import { authApi } from '../../api/auth';
 import type { Campaign, Product } from '../../types';
 
 export const Campaigns = () => {
@@ -25,8 +24,6 @@ export const Campaigns = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      await authApi.getOrInitMerchantId();
-      
       const [campRes, prodRes] = await Promise.all([
         campaignsApi.listCampaigns().catch(() => ({ data: [] })),
         productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
@@ -59,14 +56,14 @@ export const Campaigns = () => {
 
   const handleStatusChange = async (id: string, newStatus: 'ACTIVE' | 'PAUSED' | 'ENDED' | 'REJECTED') => {
     try {
-      // The backend accepts 'PROPOSED', 'ACTIVE', 'PAUSED', 'ENDED'. 
+      // The backend accepts 'PROPOSED', 'ACTIVE', 'PAUSED', 'ENDED'.
       // If we need to reject, maybe there's no REJECTED status, let's assume ENDED acts as reject/cancel, or we just remove it from UI.
       // Wait, backend CampaignStatus typically has REJECTED? Let's send ENDED for rejected proposals for safety.
       const statusToSend = newStatus === 'REJECTED' ? 'ENDED' : newStatus;
       await campaignsApi.updateStatus(id, { status: statusToSend as any });
-      
+
       // Optimistic update
-      setCampaigns(prev => prev.map(c => 
+      setCampaigns(prev => prev.map(c =>
         c.id === id ? { ...c, status: statusToSend as any } : c
       ));
     } catch (err) {
@@ -98,8 +95,8 @@ export const Campaigns = () => {
             Automatically generate and manage targeted marketing campaigns based on actionable buyer friction detected during AI simulations.
           </p>
         </div>
-        <Button 
-          onClick={handleGenerate} 
+        <Button
+          onClick={handleGenerate}
           disabled={generating}
           className="flex items-center"
         >
@@ -145,13 +142,13 @@ export const Campaigns = () => {
                             {campaign.campaign_type.replace('_', ' ')}
                           </span>
                         </div>
-                        
+
                         <div className="space-y-4 text-sm">
                           <div>
                             <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Objective</p>
                             <p className="font-medium text-gray-800">{campaign.objective}</p>
                           </div>
-                          
+
                           {product && (
                             <div className="bg-gray-50 p-3 rounded border border-gray-100">
                               <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Target Product</p>
@@ -173,15 +170,15 @@ export const Campaigns = () => {
                         </div>
 
                         <div className="mt-6 flex gap-3">
-                          <Button 
+                          <Button
                             className="flex-1 bg-[var(--rzp-success)] hover:bg-green-700 text-white"
                             onClick={() => handleStatusChange(campaign.id, 'ACTIVE')}
                           >
                             <CheckCircle2 className="w-4 h-4 mr-2" />
                             Approve
                           </Button>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
                             onClick={() => handleStatusChange(campaign.id, 'REJECTED')}
                           >
@@ -218,7 +215,7 @@ export const Campaigns = () => {
                           Live
                         </span>
                       </div>
-                      
+
                       <div className="space-y-4 text-sm mb-6">
                         <div>
                           <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Message Content</p>
@@ -226,8 +223,8 @@ export const Campaigns = () => {
                         </div>
                       </div>
 
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="w-full text-amber-600 border-amber-200 hover:bg-amber-50"
                         onClick={() => handleStatusChange(campaign.id, 'PAUSED')}
                       >
@@ -256,10 +253,10 @@ export const Campaigns = () => {
                         </span>
                       </div>
                       <p className="text-sm text-gray-500 line-clamp-2">"{campaign.message_content}"</p>
-                      
+
                       {campaign.status === 'PAUSED' && (
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           className="mt-4 w-full"
                           onClick={() => handleStatusChange(campaign.id, 'ACTIVE')}

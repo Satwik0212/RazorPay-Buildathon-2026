@@ -159,3 +159,32 @@ def test_calculate_score_bounds_strict_enforcement():
             prod = {"price": price, "metadata": {"delivery_days": 2, "rating": 4.5}}
             s = ProductScorer.calculate_score(prod, {"price": 1.0}, max_budget_minor=budget)
             assert 0.0 <= s <= 1.0, f"Score {s} out of bounds for price={price}, budget={budget}"
+
+
+def test_calculate_score_with_breakdown():
+    product = {
+        "name": "Sony Wireless Headphones",
+        "description": "High performance audio with ANC and long battery life.",
+        "price": 499900,
+        "product_metadata": {
+            "delivery_days": 2,
+            "rating": 4.6,
+            "warranty": True,
+            "return_days": 14,
+            "discount_percent": 10,
+        }
+    }
+    weights = {"price": 0.3, "delivery": 0.2, "quality": 0.2, "returns": 0.1, "offers": 0.1, "metadata": 0.1}
+
+    score, breakdown = ProductScorer.calculate_score_with_breakdown(product, weights, max_budget_minor=600000)
+    score_standalone = ProductScorer.calculate_score(product, weights, max_budget_minor=600000)
+
+    # Identical score calculation
+    assert score == score_standalone
+    assert 0.0 <= score <= 1.0
+
+    # Verify all 6 dimensions present and bounded
+    expected_keys = {"price", "delivery", "quality", "returns", "offers", "metadata"}
+    assert set(breakdown.keys()) == expected_keys
+    for k, val in breakdown.items():
+        assert 0.0 <= val <= 1.0, f"Breakdown key {k} had value {val} outside [0.0, 1.0]"

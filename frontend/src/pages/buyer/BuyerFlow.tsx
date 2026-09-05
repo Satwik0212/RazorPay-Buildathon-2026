@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { 
-  ShoppingBag, Search, ShoppingCart, ShieldCheck, 
+import {
+  ShoppingBag, Search, ShoppingCart, ShieldCheck,
   CheckCircle, ArrowLeft, Loader2, AlertCircle, XCircle,
   Plus, Minus, Trash2
 } from 'lucide-react';
@@ -18,7 +18,8 @@ import { buyerApiClient } from '../../api/client';
 
 import { campaignsApi } from '../../api/campaigns';
 import { upsellApi } from '../../api/upsell';
-import type { Campaign, UpsellResponse } from '../../types';
+import { ProductRecommendations } from '../../components/features/buyer/ProductRecommendations';
+import type { Campaign, UpsellResponse, UpsellSuggestion } from '../../types';
 
 import type { Quote, Cart, Product, Authorization, CheckoutOrder } from '../../types';
 import axios from 'axios';
@@ -42,7 +43,7 @@ const extractErrorMessage = (err: any, fallback: string): string => {
 
 export const BuyerFlow = () => {
   const [step, setStep] = useState<'auth' | 'catalog' | 'product_detail' | 'cart' | 'checkout' | 'success'>('auth');
-  
+
   // Data state
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -50,17 +51,21 @@ export const BuyerFlow = () => {
   const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
   const [activeAuth, setActiveAuth] = useState<Authorization | null>(null);
   const [activeOrder, setActiveOrder] = useState<CheckoutOrder | null>(null);
-  
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAiSearch, setIsAiSearch] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authData, setAuthData] = useState({ email: '', password: '' });
+  const [authData, setAuthData] = useState({ name: '', email: '', password: '' });
   const [activeCampaigns, setActiveCampaigns] = useState<Campaign[]>([]);
   const [upsellData, setUpsellData] = useState<UpsellResponse | null>(null);
-  
+  const [upsellLoading, setUpsellLoading] = useState(false);
+  const [upsellError, setUpsellError] = useState<string | null>(null);
+  const [addingSuggestionId, setAddingSuggestionId] = useState<string | null>(null);
+  const [addedSuggestionId, setAddedSuggestionId] = useState<string | null>(null);
+
   useEffect(() => {
     // Check if buyer is logged in
     const token = localStorage.getItem('buyer_token');
@@ -82,11 +87,23 @@ export const BuyerFlow = () => {
     try {
       let res;
       if (authMode === 'login') {
-        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/login`, authData);
+        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/login`, {
+          email: authData.email.trim(),
+          password: authData.password,
+        });
       } else {
-        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/register`, authData);
+        res = await axios.post(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/register`, {
+          name: authData.name.trim() || 'Buyer',
+          email: authData.email.trim(),
+          password: authData.password,
+          role: 'CUSTOMER',
+        });
       }
+      localStorage.setItem('access_token', res.data.access_token);
       localStorage.setItem('buyer_token', res.data.access_token);
+      if (res.data.user) {
+        localStorage.setItem('user_profile', JSON.stringify(res.data.user));
+      }
       setStep('catalog');
       fetchProducts();
       fetchCampaigns();
@@ -99,7 +116,8 @@ export const BuyerFlow = () => {
 
   const fetchCampaigns = async () => {
     try {
-      const merchantId = localStorage.getItem('buyer_merchant_id') || 'e715fbe6-b364-4b99-a46d-f802ab164faf';
+      const merchantId = localStorage.getItem('buyer_merchant_id');
+      if (!merchantId) return; // No merchant context – skip
       const res = await campaignsApi.getActiveCampaigns(merchantId);
       setActiveCampaigns(res.data.filter(c => c.status === 'ACTIVE'));
     } catch (err) {
@@ -157,11 +175,52 @@ export const BuyerFlow = () => {
     setSelectedProduct(product);
     setStep('product_detail');
     setUpsellData(null);
+    setUpsellLoading(true);
+    setUpsellError(null);
     try {
       const res = await upsellApi.getProductSuggestions(product.id);
       setUpsellData(res.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load upsell suggestions', err);
+      setUpsellError(extractErrorMessage(err, 'Failed to load recommendations.'));
+    } finally {
+      setUpsellLoading(false);
+    }
+  };
+
+  const handleAddSuggestionToCart = async (suggestion: UpsellSuggestion) => {
+    if (!selectedProduct) return;
+    setAddingSuggestionId(suggestion.product_id);
+    setError('');
+    try {
+      let cartId = activeCart?.id;
+      if (!cartId || activeCart?.merchant_id !== selectedProduct.merchant_id) {
+        // Create cart for the product's merchant
+        const cartRes = await cartsApi.createCart({ merchant_id: selectedProduct.merchant_id });
+        cartId = cartRes.data.id;
+        setActiveCart(cartRes.data);
+      }
+
+      const res = await cartsApi.createItem(cartId as string, {
+        product_id: suggestion.product_id,
+        quantity: 1
+      });
+      setActiveCart(res.data);
+      setAddedSuggestionId(suggestion.product_id);
+      setTimeout(() => {
+        setAddedSuggestionId(null);
+      }, 2500);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('buyer_token');
+        setStep('auth');
+        setError('Your session has expired. Please sign in again.');
+      } else {
+        console.error('Failed to add suggestion to cart', err);
+        setError(extractErrorMessage(err, 'Could not add recommended product to cart.'));
+      }
+    } finally {
+      setAddingSuggestionId(null);
     }
   };
 
@@ -186,7 +245,7 @@ export const BuyerFlow = () => {
         cartId = cartRes.data.id;
         setActiveCart(cartRes.data);
       }
-      
+
       const res = await cartsApi.createItem(cartId as string, { product_id: selectedProduct.id, quantity: 1 });
       setActiveCart(res.data);
       setStep('cart');
@@ -250,20 +309,20 @@ export const BuyerFlow = () => {
     try {
       const quoteRes = await quotesApi.createQuote(activeCart.id);
       setActiveQuote(quoteRes.data);
-      
+
       const authRes = await authorizationsApi.createAuthorization(quoteRes.data.quote_id);
       setActiveAuth(authRes.data);
-      
+
       if (authRes.data.status !== 'APPROVED') {
         throw new Error(`Merchant policy block: ${authRes.data.status}`);
       }
-      
-      const orderRes = await checkoutApi.createOrder({ 
+
+      const orderRes = await checkoutApi.createOrder({
         quote_id: quoteRes.data.quote_id,
         authorization_id: authRes.data.authorization_id
       });
       setActiveOrder(orderRes.data);
-      
+
       setStep('checkout');
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -280,18 +339,18 @@ export const BuyerFlow = () => {
 
   const handleRazorpayPayment = () => {
     if (!activeOrder) return;
-    
+
     // In case the Razorpay mock script is injected or actual script is used
     if (!window.Razorpay) {
       setError('Razorpay SDK not loaded. Please ensure you have internet connection.');
       return;
     }
-    
+
     const options = {
       key: (activeOrder as any).razorpay_key_id, // Ensure we pass the key from backend
       amount: activeOrder.amount,
       currency: activeOrder.currency,
-      name: "Razorpay Buildathon Store",
+      name: "GraahakLens Store",
       description: "Test Transaction",
       order_id: activeOrder.razorpay_order_id,
       handler: async function (response: any) {
@@ -330,7 +389,7 @@ export const BuyerFlow = () => {
         color: "#6822CC"
       }
     };
-    
+
     const rzp = new window.Razorpay(options);
     rzp.on('payment.failed', function (response: any){
       setError(`Payment failed: ${response.error.description}`);
@@ -346,7 +405,7 @@ export const BuyerFlow = () => {
         </Button>
       )}
       <h1 className="text-2xl font-bold text-[var(--rzp-text)]">{title}</h1>
-      
+
       {step !== 'auth' && (
         <div className="ml-auto">
           <Button variant="outline" onClick={() => setStep('cart')} className="relative">
@@ -377,31 +436,44 @@ export const BuyerFlow = () => {
         <Card className="max-w-md mx-auto mt-12 shadow-lg">
           <CardHeader className="text-center">
             <ShoppingBag className="h-12 w-12 mx-auto text-[var(--rzp-primary)] mb-4" />
-            <CardTitle className="text-2xl">Buyer Portal</CardTitle>
+            <CardTitle className="text-2xl">GraahakLens Buyer Portal</CardTitle>
             <p className="text-sm text-gray-500 mt-2">
               {authMode === 'login' ? 'Sign in to access the store.' : 'Create an account to start shopping.'}
             </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAuth} className="space-y-4">
+              {authMode === 'register' && (
+                <div className="space-y-2">
+                  <label htmlFor="buyer-name">Full Name</label>
+                  <Input
+                    id="buyer-name"
+                    type="text"
+                    required
+                    value={authData.name}
+                    onChange={e => setAuthData({...authData, name: e.target.value})}
+                    placeholder="e.g. Priya Sharma"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <label htmlFor="email">Email</label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  required 
-                  value={authData.email} 
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={authData.email}
                   onChange={e => setAuthData({...authData, email: e.target.value})}
                   placeholder="buyer@example.com"
                 />
               </div>
               <div className="space-y-2">
                 <label htmlFor="password">Password</label>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  required 
-                  value={authData.password} 
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={authData.password}
                   onChange={e => setAuthData({...authData, password: e.target.value})}
                   placeholder="••••••••"
                 />
@@ -447,10 +519,10 @@ export const BuyerFlow = () => {
             </div>
           )}
 
-          
+
           <div className="flex flex-col md:flex-row gap-4 mb-8">
             <div className="flex-1 relative">
-              <Input 
+              <Input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={isAiSearch ? "e.g. I want a cheap gaming laptop under 50k" : "Search products..."}
@@ -461,8 +533,8 @@ export const BuyerFlow = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className="whitespace-nowrap flex items-center cursor-pointer text-sm">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   className="mr-2 rounded text-[var(--rzp-primary)] focus:ring-[var(--rzp-primary)]"
                   checked={isAiSearch}
                   onChange={e => setIsAiSearch(e.target.checked)}
@@ -526,7 +598,7 @@ export const BuyerFlow = () => {
               </div>
               <h1 className="text-3xl font-bold text-[var(--rzp-text)] mb-4">{selectedProduct.name}</h1>
               <p className="text-gray-600 mb-6 flex-grow">{selectedProduct.description || 'No description available for this product.'}</p>
-              
+
               {selectedProduct.metadata && Object.keys(selectedProduct.metadata).length > 0 && (
                 <div className="bg-gray-50 p-4 rounded-md mb-6 border">
                   <h4 className="font-medium mb-2 text-sm text-gray-500">Specifications</h4>
@@ -540,7 +612,7 @@ export const BuyerFlow = () => {
                   </ul>
                 </div>
               )}
-              
+
               <div className="flex items-center justify-between mt-auto pt-6 border-t border-gray-200">
                 <div>
                   <p className="text-3xl font-bold text-[var(--rzp-text)]">{formatPrice(selectedProduct.price)}</p>
@@ -550,18 +622,18 @@ export const BuyerFlow = () => {
                     </p>
                   ) : (
                     <p className="text-sm text-[var(--rzp-success)] font-medium mt-1 flex items-center">
-                      <CheckCircle className="h-4 w-4 mr-1" /> 
-                      {selectedProduct.inventory?.available_quantity !== undefined 
-                        ? `${selectedProduct.inventory.available_quantity} in stock` 
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      {selectedProduct.inventory?.available_quantity !== undefined
+                        ? `${selectedProduct.inventory.available_quantity} in stock`
                         : 'In stock'}
                     </p>
                   )}
                 </div>
-                <Button 
-                  onClick={addToCart} 
-                  isLoading={loading} 
+                <Button
+                  onClick={addToCart}
+                  isLoading={loading}
                   disabled={Boolean(selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0)}
-                  size="lg" 
+                  size="lg"
                   className="px-8"
                 >
                   {selectedProduct.inventory && selectedProduct.inventory.available_quantity <= 0 ? 'Out of Stock' : 'Add to Cart'}
@@ -570,84 +642,19 @@ export const BuyerFlow = () => {
             </div>
           </div>
 
-          {/* Upsell / Cross-sell Suggestions */}
-          {upsellData && (upsellData.upsell.length > 0 || upsellData.cross_sell.length > 0) && (
-            <div className="mt-12 space-y-12 border-t pt-10">
-              
-              {/* AI-powered badge */}
-              {upsellData.ai_powered && (
-                <div className="flex items-center gap-2 text-xs text-[var(--rzp-primary)] font-semibold">
-                  <span className="bg-blue-50 border border-blue-200 rounded-full px-3 py-1">✦ AI-Powered Recommendations</span>
-                  <span className="text-gray-400 font-normal">Grounded in your catalogue — no invented claims</span>
-                </div>
-              )}
-
-              {upsellData.upsell.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <h3 className="text-2xl font-bold">You might also consider</h3>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-semibold uppercase tracking-wider">Upgrade</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {upsellData.upsell.map(item => (
-                      <Card key={item.product_id} className="cursor-pointer hover:shadow-md transition-shadow border-blue-100" onClick={() => {
-                        const p = products.find(x => x.id === item.product_id);
-                        if (p) viewProduct(p);
-                      }}>
-                        <CardContent className="p-4">
-                          <div className="bg-gray-100 h-32 rounded mb-4 flex items-center justify-center">
-                            <ShoppingBag className="h-10 w-10 text-gray-400" />
-                          </div>
-                          <div className="text-xs text-[var(--rzp-primary)] font-bold mb-1 uppercase tracking-wider">{item.category}</div>
-                          <h4 className="font-bold mb-1 line-clamp-1">{item.name}</h4>
-                          <p className="text-lg font-bold mb-2">{formatPrice(item.price)}</p>
-                          {item.explanation && (
-                            <p className="text-sm text-gray-500 line-clamp-3 italic bg-blue-50 p-2 rounded">{item.explanation}</p>
-                          )}
-                          {item.ai_confidence !== undefined && (
-                            <div className="mt-2 text-xs text-gray-400">AI relevance: {Math.round(item.ai_confidence * 100)}%</div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {upsellData.cross_sell.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <h3 className="text-2xl font-bold">Complete your setup</h3>
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-semibold uppercase tracking-wider">Pair with this</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {upsellData.cross_sell.map(item => (
-                      <Card key={item.product_id} className="cursor-pointer hover:shadow-md transition-shadow border-green-100" onClick={() => {
-                        const p = products.find(x => x.id === item.product_id);
-                        if (p) viewProduct(p);
-                      }}>
-                        <CardContent className="p-4">
-                          <div className="bg-gray-100 h-32 rounded mb-4 flex items-center justify-center">
-                            <ShoppingBag className="h-10 w-10 text-gray-400" />
-                          </div>
-                          <div className="text-xs text-[var(--rzp-success)] font-bold mb-1 uppercase tracking-wider">{item.category}</div>
-                          <h4 className="font-bold mb-1 line-clamp-1">{item.name}</h4>
-                          <p className="text-lg font-bold mb-2">{formatPrice(item.price)}</p>
-                          {item.explanation && (
-                            <p className="text-sm text-gray-500 line-clamp-3 italic bg-green-50 p-2 rounded">{item.explanation}</p>
-                          )}
-                          {item.ai_confidence !== undefined && (
-                            <div className="mt-2 text-xs text-gray-400">AI relevance: {Math.round(item.ai_confidence * 100)}%</div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          )}
+          {/* AI-Powered Upsell / Cross-sell Recommendations */}
+          <ProductRecommendations
+            upsellData={upsellData}
+            isLoading={upsellLoading}
+            error={upsellError}
+            currentProduct={selectedProduct}
+            catalogProducts={products}
+            onViewProduct={viewProduct}
+            onAddToCart={handleAddSuggestionToCart}
+            addingSuggestionId={addingSuggestionId}
+            addedSuggestionId={addedSuggestionId}
+            formatPrice={formatPrice}
+          />
         </div>
       )}
 
@@ -655,7 +662,7 @@ export const BuyerFlow = () => {
       {step === 'cart' && (
         <div>
           {renderHeader('Your Cart', true, () => setStep('catalog'))}
-          
+
           {!activeCart || !activeCart.items || activeCart.items.length === 0 ? (
             <div className="text-center py-20 bg-gray-50 rounded-lg border border-dashed border-gray-300">
               <ShoppingCart className="h-16 w-16 mx-auto text-gray-400 mb-4" />
@@ -728,7 +735,7 @@ export const BuyerFlow = () => {
                   </Card>
                 ))}
               </div>
-              
+
               <div>
                 <Card className="sticky top-6">
                   <CardHeader>
@@ -764,7 +771,7 @@ export const BuyerFlow = () => {
       {step === 'checkout' && activeOrder && activeQuote && (
         <div className="max-w-2xl mx-auto">
           {renderHeader('Checkout', true, () => setStep('cart'))}
-          
+
           <Card className="mb-6 border-[var(--rzp-primary)] shadow-md">
             <CardHeader className="bg-[var(--rzp-primary-soft)] border-b border-[var(--rzp-primary)]">
               <CardTitle className="text-[var(--rzp-primary)] flex items-center">
@@ -792,7 +799,7 @@ export const BuyerFlow = () => {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle>Payment Details</CardTitle>

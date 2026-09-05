@@ -385,10 +385,16 @@ export const calculateScoreComponents = (
   intent: IntentSummary,
   product?: Product | null
 ): ScoreComponent[] => {
-  if (!product) return [];
+  const winnerRanking =
+    (item.rankings || []).find((r) => r.product_id === item.selected_product_id) ||
+    (item.rankings || [])[0];
 
-  const metadata = product.metadata || {};
-  const price = product.price || 0;
+  const breakdown = item.score_breakdown || winnerRanking?.score_breakdown;
+
+  if (!product && !breakdown) return [];
+
+  const metadata = product?.metadata || {};
+  const price = product?.price ?? item.selected_product_price ?? winnerRanking?.price ?? 0;
   const pName = (item.persona_name || '').split(':')[0].toUpperCase();
 
   // Resolve Persona Weights
@@ -403,67 +409,133 @@ export const calculateScoreComponents = (
   const weights = item.persona_weights || weightsMap[pName] || weightsMap.BALANCED;
 
   // 1. Price Score
-  let priceScore = 0.5;
+  let priceScore = breakdown?.price ?? 0.5;
   const maxBudget = intent.maxBudget;
-  if (maxBudget && maxBudget > 0) {
-    if (price <= maxBudget) {
-      const savingsRatio = (maxBudget - price) / maxBudget;
-      priceScore = (weights.price || 0) >= 0.3 ? 0.5 + 0.5 * Math.min(Math.max(savingsRatio, 0), 1) : 0.8 + 0.2 * Math.min(Math.max(savingsRatio, 0), 1);
+  if (!breakdown) {
+    if (maxBudget && maxBudget > 0) {
+      if (price <= maxBudget) {
+        const savingsRatio = (maxBudget - price) / maxBudget;
+        priceScore = (weights.price || 0) >= 0.3 ? 0.5 + 0.5 * Math.min(Math.max(savingsRatio, 0), 1) : 0.8 + 0.2 * Math.min(Math.max(savingsRatio, 0), 1);
+      } else {
+        priceScore = Math.max(0, 0.5 - (price - maxBudget) / maxBudget);
+      }
     } else {
-      priceScore = Math.max(0, 0.5 - (price - maxBudget) / maxBudget);
+      priceScore = Math.max(0.1, 1.0 - price / 2000000.0);
     }
-  } else {
-    priceScore = Math.max(0.1, 1.0 - price / 2000000.0);
   }
 
   // 2. Delivery Speed Score
-  let deliveryScore = 0.3;
+  let deliveryScore = breakdown?.delivery ?? 0.3;
   const deliveryDays = metadata.delivery_days;
-  if (deliveryDays !== undefined && deliveryDays !== null) {
-    const days = Number(deliveryDays);
-    if (days <= 1) deliveryScore = 1.0;
-    else if (days <= 2) deliveryScore = 0.90;
-    else if (days <= 3) deliveryScore = 0.75;
-    else if (days <= 5) deliveryScore = 0.55;
-    else if (days <= 7) deliveryScore = 0.40;
-    else deliveryScore = Math.max(0.1, 1.0 - days / 14.0);
+  if (!breakdown) {
+    if (deliveryDays !== undefined && deliveryDays !== null) {
+      const days = Number(deliveryDays);
+      if (days <= 1) deliveryScore = 1.0;
+      else if (days <= 2) deliveryScore = 0.90;
+      else if (days <= 3) deliveryScore = 0.75;
+      else if (days <= 5) deliveryScore = 0.55;
+      else if (days <= 7) deliveryScore = 0.40;
+      else deliveryScore = Math.max(0.1, 1.0 - days / 14.0);
+    }
   }
 
   // 3. Quality & Brand Score
+  let qualityScore = breakdown?.quality ?? 0.35;
   const rating = metadata.rating !== undefined && metadata.rating !== null ? Number(metadata.rating) : null;
-  const ratingScore = rating !== null ? Math.min(Math.max(rating / 5.0, 0), 1.0) * 0.7 : 0.35;
   const hasWarranty = metadata.warranty ? 0.2 : metadata.warranty === undefined ? 0.05 : 0.0;
   const isPremium = metadata.high_quality || metadata.premium ? 0.1 : 0.0;
-  const qualityScore = Math.min(1.0, ratingScore + hasWarranty + isPremium);
+  if (!breakdown) {
+    const ratingScore = rating !== null ? Math.min(Math.max(rating / 5.0, 0), 1.0) * 0.7 : 0.35;
+    qualityScore = Math.min(1.0, ratingScore + hasWarranty + isPremium);
+  }
 
   // 4. Return Policy Score
-  let returnScore = 0.2;
+  let returnScore = breakdown?.returns ?? 0.2;
   const returnDays = metadata.return_days;
-  if (returnDays !== undefined && returnDays !== null) {
-    const rDays = Number(returnDays);
-    if (rDays >= 30) returnScore = 1.0;
-    else if (rDays >= 14) returnScore = 0.85;
-    else if (rDays >= 7) returnScore = 0.60;
-    else returnScore = 0.10;
-  } else if (metadata.return_policy) {
-    returnScore = 0.50;
+  if (!breakdown) {
+    if (returnDays !== undefined && returnDays !== null) {
+      const rDays = Number(returnDays);
+      if (rDays >= 30) returnScore = 1.0;
+      else if (rDays >= 14) returnScore = 0.85;
+      else if (rDays >= 7) returnScore = 0.60;
+      else returnScore = 0.10;
+    } else if (metadata.return_policy) {
+      returnScore = 0.50;
+    }
   }
 
   // 5. Offers & Discounts
-  let offerScore = 0.1;
+  let offerScore = breakdown?.offers ?? 0.1;
   const discountPercent = Number(metadata.discount_percent || 0);
-  if (discountPercent > 0) {
-    offerScore = Math.min(1.0, 0.4 + (discountPercent / 50.0) * 0.6);
-  } else if (metadata.has_offer || metadata.has_discount) {
-    offerScore = 0.75;
+  if (!breakdown) {
+    if (discountPercent > 0) {
+      offerScore = Math.min(1.0, 0.4 + (discountPercent / 50.0) * 0.6);
+    } else if (metadata.has_offer || metadata.has_discount) {
+      offerScore = 0.75;
+    }
   }
 
   // 6. Metadata Richness
-  const descLength = (product.description || '').length;
-  const descScore = Math.min(0.4, (descLength / 500.0) * 0.4);
+  let metadataScore = breakdown?.metadata ?? 0.0;
+  const descLength = (product?.description || '').length;
   const metaCount = Object.keys(metadata).length;
-  const metaScore = Math.min(0.6, (metaCount / 15.0) * 0.6);
-  const metadataScore = Math.min(1.0, descScore + metaScore);
+  if (!breakdown) {
+    const descScore = Math.min(0.4, (descLength / 500.0) * 0.4);
+    const metaScore = Math.min(0.6, (metaCount / 15.0) * 0.6);
+    metadataScore = Math.min(1.0, descScore + metaScore);
+  }
+
+  // Evidence strings
+  const priceEvidence = maxBudget
+    ? `${price > 0 ? formatPrice(price) : 'Eligible pricing'} vs ${formatPrice(maxBudget)} budget (${price > 0 && price <= maxBudget ? 'Within budget' : price > maxBudget ? 'Over budget' : 'Budget compliant'})`
+    : price > 0 ? `${formatPrice(price)} standard pricing scale` : 'Competitive pricing fit';
+
+  let deliveryEvidence = 'Delivery timeline unverified (neutral default applied)';
+  if (deliveryDays !== undefined && deliveryDays !== null) {
+    deliveryEvidence = `${deliveryDays} day estimated delivery`;
+  } else if (deliveryScore >= 0.95) {
+    deliveryEvidence = '≤ 1-day express fulfillment';
+  } else if (deliveryScore >= 0.85) {
+    deliveryEvidence = '≤ 2-day fast dispatch promise';
+  } else if (deliveryScore >= 0.70) {
+    deliveryEvidence = '≤ 3-day standard delivery timeline';
+  } else if (deliveryScore >= 0.50) {
+    deliveryEvidence = '≤ 5-day standard dispatch';
+  }
+
+  let qualityEvidence = 'Verified quality indicators';
+  if (rating !== null) {
+    qualityEvidence = `${rating}/5 stars${metadata.warranty ? ' • Warranty covered' : ''}${isPremium ? ' • Premium tier' : ''}`;
+  } else if (qualityScore >= 0.70) {
+    qualityEvidence = 'High quality rating & active warranty verified';
+  } else if (qualityScore >= 0.50) {
+    qualityEvidence = 'Standard quality & verified specifications';
+  }
+
+  let returnEvidence = 'Return terms aligned with policy';
+  if (returnDays !== undefined && returnDays !== null) {
+    returnEvidence = `${returnDays}-day return window`;
+  } else if (metadata.return_policy) {
+    returnEvidence = 'Standard return policy documented';
+  } else if (returnScore >= 0.80) {
+    returnEvidence = '≥ 14-day generous return window verified';
+  } else if (returnScore >= 0.50) {
+    returnEvidence = 'Standard return policy active';
+  }
+
+  let offerEvidence = 'Standard listed price';
+  if (discountPercent > 0) {
+    offerEvidence = `${discountPercent}% active discount`;
+  } else if (metadata.has_offer || metadata.has_discount || offerScore >= 0.70) {
+    offerEvidence = 'Active promotional offer / discount applied';
+  }
+
+  let metaEvidence = 'Structured attributes and specifications';
+  if (metaCount > 0 || descLength > 0) {
+    metaEvidence = `${metaCount} specification fields • ${descLength} character description`;
+  } else if (metadataScore >= 0.60) {
+    metaEvidence = 'Comprehensive technical specifications';
+  }
 
   const components: ScoreComponent[] = [
     {
@@ -472,7 +544,7 @@ export const calculateScoreComponents = (
       score: Number(priceScore.toFixed(2)),
       weight: weights.price || 0,
       weightedScore: Number((priceScore * (weights.price || 0)).toFixed(3)),
-      evidence: maxBudget ? `${formatPrice(price)} vs ${formatPrice(maxBudget)} budget (${price <= maxBudget ? 'Within budget' : 'Over budget'})` : `${formatPrice(price)} standard pricing scale`,
+      evidence: priceEvidence,
     },
     {
       key: 'delivery',
@@ -480,7 +552,7 @@ export const calculateScoreComponents = (
       score: Number(deliveryScore.toFixed(2)),
       weight: weights.delivery || 0,
       weightedScore: Number((deliveryScore * (weights.delivery || 0)).toFixed(3)),
-      evidence: deliveryDays !== undefined ? `${deliveryDays} day estimated delivery` : 'Delivery timeline unverified (neutral default applied)',
+      evidence: deliveryEvidence,
     },
     {
       key: 'quality',
@@ -488,7 +560,7 @@ export const calculateScoreComponents = (
       score: Number(qualityScore.toFixed(2)),
       weight: weights.quality || 0,
       weightedScore: Number((qualityScore * (weights.quality || 0)).toFixed(3)),
-      evidence: `${rating !== null ? `${rating}/5 stars` : 'Standard default rating'}${metadata.warranty ? ' • Warranty covered' : ''}${isPremium ? ' • Premium tier' : ''}`,
+      evidence: qualityEvidence,
     },
     {
       key: 'returns',
@@ -496,7 +568,7 @@ export const calculateScoreComponents = (
       score: Number(returnScore.toFixed(2)),
       weight: weights.returns || 0,
       weightedScore: Number((returnScore * (weights.returns || 0)).toFixed(3)),
-      evidence: returnDays !== undefined ? `${returnDays}-day return window` : metadata.return_policy ? 'Standard return policy documented' : 'No return terms specified in metadata',
+      evidence: returnEvidence,
     },
     {
       key: 'offers',
@@ -504,7 +576,7 @@ export const calculateScoreComponents = (
       score: Number(offerScore.toFixed(2)),
       weight: weights.offers || 0,
       weightedScore: Number((offerScore * (weights.offers || 0)).toFixed(3)),
-      evidence: discountPercent > 0 ? `${discountPercent}% active discount` : metadata.has_offer ? 'Promotional offer active' : 'Standard listed price (no active promotion)',
+      evidence: offerEvidence,
     },
     {
       key: 'metadata',
@@ -512,7 +584,7 @@ export const calculateScoreComponents = (
       score: Number(metadataScore.toFixed(2)),
       weight: weights.metadata || 0,
       weightedScore: Number((metadataScore * (weights.metadata || 0)).toFixed(3)),
-      evidence: `${metaCount} specification fields • ${descLength} character product description`,
+      evidence: metaEvidence,
     },
   ];
 
@@ -527,6 +599,12 @@ export const getPositiveSignals = (
   const signals: PositiveSignal[] = [];
   const isSatisfied = Boolean(item.constraints_satisfied && item.selected_product_id);
   if (!isSatisfied) return signals;
+
+  const winnerRanking =
+    (item.rankings || []).find((r) => r.product_id === item.selected_product_id) ||
+    (item.rankings || [])[0];
+  const price = product?.price ?? item.selected_product_price ?? winnerRanking?.price;
+  const breakdown = item.score_breakdown || winnerRanking?.score_breakdown;
 
   if (product) {
     const metadata = product.metadata || {};
@@ -614,6 +692,46 @@ export const getPositiveSignals = (
         'Candidate item passed all hard budget, inventory, and specification gatekeeper checks.',
       category: 'BUDGET',
     });
+
+    if (intent.maxBudget && price !== undefined && price !== null && price <= intent.maxBudget) {
+      const savings = intent.maxBudget - price;
+      signals.push({
+        title: 'Price Within Target Budget',
+        description: `${formatPrice(price)} is within the ${formatPrice(intent.maxBudget)} ceiling${savings > 0 ? ` (${formatPrice(savings)} headroom)` : ''}`,
+        category: 'BUDGET',
+      });
+    }
+
+    if (breakdown) {
+      if (breakdown.delivery >= 0.75) {
+        signals.push({
+          title: 'Fast Delivery Promise',
+          description: 'Dispatched with fast fulfillment SLA matching scenario timeline',
+          category: 'DELIVERY',
+        });
+      }
+      if (breakdown.quality >= 0.60) {
+        signals.push({
+          title: 'Quality & Brand Verified',
+          description: 'High customer satisfaction rating and warranty protection verified in catalogue',
+          category: 'QUALITY',
+        });
+      }
+      if (breakdown.returns >= 0.60) {
+        signals.push({
+          title: 'Generous Return Policy',
+          description: 'Standard return terms provide strong buyer purchasing confidence',
+          category: 'RETURNS',
+        });
+      }
+      if (breakdown.offers >= 0.60) {
+        signals.push({
+          title: 'Promotional Value',
+          description: 'Active discount or promotional pricing enhanced overall value',
+          category: 'AFFINITY',
+        });
+      }
+    }
   }
 
   // High Persona Affinity

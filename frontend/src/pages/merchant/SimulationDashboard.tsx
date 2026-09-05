@@ -150,9 +150,6 @@ export const SimulationDashboard: React.FC = () => {
     setSimulating(true);
     setError('');
     try {
-      const realMerchantId = await authApi.getOrInitMerchantId();
-      if (!realMerchantId) throw new Error("No merchant session found.");
-
       if (results) {
         setBaselineRun(results);
         try {
@@ -179,9 +176,6 @@ export const SimulationDashboard: React.FC = () => {
     setSimulating(true);
     setError('');
     try {
-      const realMerchantId = await authApi.getOrInitMerchantId();
-      if (!realMerchantId) throw new Error("No merchant session found.");
-
       if (results) {
         setBaselineRun(results);
         try {

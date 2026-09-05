@@ -41,3 +41,4 @@ __all__ = [
 ]
 
 from app.models.campaign import Campaign
+from app.models.catalogue_import_job import CatalogueImportJob

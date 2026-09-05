@@ -77,7 +77,7 @@ export const RecommendationPipelineHeader: React.FC<RecommendationPipelineHeader
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--rzp-text-muted)] flex items-center">
           <span className="w-2 h-2 rounded-full bg-[var(--rzp-ai)] mr-1.5 animate-pulse"></span>
-          AI Commerce Intelligence Pipeline
+          GraahakLens Intelligence Pipeline
         </span>
         <span className="text-xs text-[var(--rzp-text-muted)] font-medium">
           Click any step to switch stages (01 Simulation → 02 Friction → 03 Insight → 04 Action)

@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { simulationApi } from '../../api/simulation';
 import { productsApi } from '../../api/products';
-import { authApi } from '../../api/auth';
 import type { Recommendation, Product, WhatIfResponse } from '../../types';
 import {
   RecommendationPipelineHeader,
@@ -95,8 +94,7 @@ export const Optimization: React.FC = () => {
   const loadData = async () => {
     setLoadingRecs(true);
     try {
-      const [merchantId, prodRes] = await Promise.all([
-        authApi.getOrInitMerchantId(),
+      const [prodRes] = await Promise.all([
         productsApi.getProducts({ limit: 100 }).catch(() => ({ data: { items: [] } })),
       ]);
 
@@ -159,8 +157,6 @@ export const Optimization: React.FC = () => {
     setWhatIfLoading(true);
     setWhatIfError('');
     try {
-      const realMerchantId = await authApi.getOrInitMerchantId();
-      if (!realMerchantId) throw new Error("Merchant authentication required.");
 
       const modifications: Record<string, any> = {};
       if (selectedProductId) {

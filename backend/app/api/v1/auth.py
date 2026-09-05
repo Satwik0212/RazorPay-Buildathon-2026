@@ -17,6 +17,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     return AuthResponse(
         user=UserResponse(
             id=user.id,
+            name=user.name,
             email=user.email,
             role=user.role,
             is_active=user.is_active,
@@ -35,6 +36,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     return AuthResponse(
         user=UserResponse(
             id=user.id,
+            name=user.name,
             email=user.email,
             role=user.role,
             is_active=user.is_active,
@@ -50,6 +52,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
+        name=current_user.name,
         email=current_user.email,
         role=current_user.role,
         is_active=current_user.is_active,

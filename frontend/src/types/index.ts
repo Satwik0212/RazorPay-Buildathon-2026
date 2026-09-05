@@ -2,9 +2,13 @@ export type Currency = 'INR' | 'USD';
 
 export interface User {
   id: string;
+  name?: string;
   email: string;
-  role: 'MERCHANT' | 'BUYER' | 'ADMIN';
-  created_at: string;
+  role: 'MERCHANT' | 'BUYER' | 'CUSTOMER' | 'ADMIN';
+  is_active?: boolean;
+  merchant_id?: string;
+  customer_id?: string;
+  created_at?: string;
 }
 
 export interface Merchant {
@@ -145,6 +149,9 @@ export interface SimulationRanking {
   rank: number;
   frictions?: string[];
   passed?: boolean;
+  price?: number;
+  category?: string;
+  score_breakdown?: Record<string, number>;
 }
 
 export interface SimulationResultItem {
@@ -171,6 +178,11 @@ export interface SimulationResultItem {
   total_eligible?: number;
   /** Total products that failed at least one hard constraint (before truncation) */
   total_disqualified?: number;
+  /** Exact deterministic component score breakdown computed by ProductScorer */
+  score_breakdown?: Record<string, number>;
+  selected_product_name?: string;
+  selected_product_price?: number;
+  selected_product_category?: string;
 }
 
 export interface SimulationSummaryMetrics {

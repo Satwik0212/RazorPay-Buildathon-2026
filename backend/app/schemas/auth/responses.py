@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr, ConfigDict
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr
+    name: str = "User"
     role: str
     is_active: bool
     merchant_id: Optional[uuid.UUID] = None

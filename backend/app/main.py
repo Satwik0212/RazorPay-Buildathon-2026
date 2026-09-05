@@ -17,6 +17,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME} in {settings.ENVIRONMENT} mode...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database schema initialized successfully.")
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(100) DEFAULT 'User'"))
+    except Exception as e:
+        logger.debug(f"User name column check: {e}")
     seed_buyer_personas()
     yield
     # Shutdown

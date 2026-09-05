@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 
 class ProductScorer:
@@ -17,6 +17,21 @@ class ProductScorer:
         """
         Deterministically calculate a product score based on persona weights.
         All normalized feature scores are in range [0.0, 1.0].
+        """
+        score, _ = ProductScorer.calculate_score_with_breakdown(
+            product, persona_weights, max_budget_minor
+        )
+        return score
+
+    @staticmethod
+    def calculate_score_with_breakdown(
+        product: Dict[str, Any],
+        persona_weights: Dict[str, float],
+        max_budget_minor: Optional[int] = None
+    ) -> Tuple[float, Dict[str, float]]:
+        """
+        Deterministically calculate a product score along with the 6 individual
+        feature score components (each in range [0.0, 1.0]).
         """
         from app.simulation.normalization import MetadataNormalizer
         metadata = MetadataNormalizer.normalize(product)
@@ -40,7 +55,7 @@ class ProductScorer:
         if max_budget_minor and max_budget_minor > 0:
             if price <= max_budget_minor:
                 savings_ratio = (max_budget_minor - price) / max_budget_minor
-                
+
                 # If price is a dominant factor, reward maximum savings linearly
                 if w_price >= 0.3:
                     price_score = 0.5 + (0.5 * min(max(savings_ratio, 0.0), 1.0))
@@ -79,7 +94,7 @@ class ProductScorer:
             rating_score = 0.35  # Neutral default (equivalent to 2.5 stars) instead of 4.0
         else:
             rating_score = min(max(float(rating_raw) / 5.0, 0.0), 1.0) * 0.7
-            
+
         warranty_raw = metadata.get("warranty")
         if warranty_raw is None:
             has_warranty = 0.05  # Slight boost for possibility, but less than verified 0.2
@@ -87,7 +102,7 @@ class ProductScorer:
             has_warranty = 0.2
         else:
             has_warranty = 0.0
-            
+
         premium_raw = metadata.get("high_quality") or metadata.get("premium")
         if premium_raw is None:
             is_premium = 0.0
@@ -95,7 +110,7 @@ class ProductScorer:
             is_premium = 0.1
         else:
             is_premium = 0.0
-            
+
         quality_score = min(1.0, rating_score + has_warranty + is_premium)
 
         # 4. Return Policy Score
@@ -128,11 +143,11 @@ class ProductScorer:
         # 6. Metadata & Feature Richness Score
         desc_length = len(product.get("description") or "")
         # Scale: 500 chars = 0.4 (max)
-        desc_score = min(0.4, (desc_length / 500.0) * 0.4) 
+        desc_score = min(0.4, (desc_length / 500.0) * 0.4)
         raw_meta = product.get("product_metadata") or product.get("metadata") or {}
         meta_count = len(raw_meta)
         # Scale: 15 keys = 0.6 (max)
-        meta_score = min(0.6, (meta_count / 15.0) * 0.6)   
+        meta_score = min(0.6, (meta_count / 15.0) * 0.6)
         metadata_score = desc_score + meta_score
 
         raw_score = (
@@ -144,4 +159,14 @@ class ProductScorer:
             (metadata_score * w_metadata)
         ) / total_w
 
-        return min(max(raw_score, 0.0), 1.0)
+        breakdown = {
+            "price": price_score,
+            "delivery": delivery_score,
+            "quality": quality_score,
+            "returns": return_score,
+            "offers": offer_score,
+            "metadata": metadata_score,
+        }
+
+        final_score = min(max(raw_score, 0.0), 1.0)
+        return final_score, breakdown

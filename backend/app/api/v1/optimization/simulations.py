@@ -205,7 +205,7 @@ def run_simulation(
 
     # Fetch personas from DB
     db_personas = db.query(BuyerPersona).all()
-    
+
     # If UI doesn't provide profiles, fallback to available DB personas or defaults
     if req.buyer_profiles:
         profiles = req.buyer_profiles
@@ -292,11 +292,14 @@ def run_simulation(
             for f in sim_output.get("frictions", []):
                 reason_name = f.get("reason", "UNKNOWN")
                 friction_summary[reason_name] = friction_summary.get(reason_name, 0) + 1
-                detailed_frictions.append({
+                det_f = {
                     "product_id": f.get("product_id"),
                     "reason": reason_name,
                     "count": 1,
-                })
+                }
+                if "delivery_deadline_days" in f:
+                    det_f["delivery_deadline_days"] = f["delivery_deadline_days"]
+                detailed_frictions.append(det_f)
 
             if sim_output["constraints_satisfied"]:
                 persona_success_count[persona_name] = (
@@ -378,6 +381,10 @@ def run_simulation(
                 total_products_evaluated=total_evaluated,
                 total_eligible=total_eligible_count,
                 total_disqualified=total_disqualified_count,
+                score_breakdown=sim_out.get("score_breakdown"),
+                selected_product_name=sim_out.get("selected_product_name"),
+                selected_product_price=sim_out.get("selected_product_price"),
+                selected_product_category=sim_out.get("selected_product_category"),
             ))
 
             db_results.append(SimulationResult(
@@ -486,11 +493,14 @@ def run_simulation(
         for f in sim_output.get("frictions", []):
             reason_name = f.get("reason", "UNKNOWN")
             friction_summary[reason_name] = friction_summary.get(reason_name, 0) + 1
-            detailed_frictions.append({
+            det_f = {
                 "product_id": f.get("product_id"),
                 "reason": reason_name,
                 "count": 1
-            })
+            }
+            if "delivery_deadline_days" in f:
+                det_f["delivery_deadline_days"] = f["delivery_deadline_days"]
+            detailed_frictions.append(det_f)
 
         # Track persona success
         if sim_output["constraints_satisfied"]:
@@ -566,6 +576,10 @@ def run_simulation(
             total_products_evaluated=total_evaluated,
             total_eligible=total_eligible_count,
             total_disqualified=total_disqualified_count,
+            score_breakdown=sim_out.get("score_breakdown"),
+            selected_product_name=sim_out.get("selected_product_name"),
+            selected_product_price=sim_out.get("selected_product_price"),
+            selected_product_category=sim_out.get("selected_product_category"),
         ))
 
         db_results.append(SimulationResult(

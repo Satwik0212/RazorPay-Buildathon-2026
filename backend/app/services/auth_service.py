@@ -27,26 +27,41 @@ class AuthService:
         if existing_user:
             raise ConflictError(f"User with email '{req.email}' already exists.")
 
+        user_role = req.role or UserRole.CUSTOMER.value
         user = User(
             email=req.email,
+            name=req.name or "User",
             password_hash=hash_password(req.password),
-            role=UserRole.CUSTOMER.value,
+            role=user_role,
             is_active=True,
         )
         created_user = self.merchant_repo.create_user(user)
 
         # Initialize corresponding role profile
-        customer = Customer(user_id=created_user.id)
-        self.customer_repo.create(customer)
+        if user_role == UserRole.MERCHANT.value:
+            merchant = Merchant(
+                user_id=created_user.id,
+                name=created_user.name or "Merchant Store",
+                is_active=True,
+            )
+            self.merchant_repo.create_merchant(merchant)
+        else:
+            customer = Customer(user_id=created_user.id)
+            self.customer_repo.create(customer)
 
-        token = create_access_token(user_id=created_user.id, role=created_user.role)
+        token = create_access_token(
+            user_id=created_user.id,
+            role=created_user.role,
+            name=created_user.name,
+            email=created_user.email,
+        )
 
         self.audit_service.log_event(
             event_type=AuditEventType.USER_REGISTERED.value,
             actor_type=ActorType.SYSTEM.value,
             entity_type="user",
             entity_id=created_user.id,
-            event_data={"email": created_user.email, "role": created_user.role},
+            event_data={"email": created_user.email, "role": created_user.role, "name": created_user.name},
         )
 
         return created_user, token
@@ -59,7 +74,12 @@ class AuthService:
         if not user.is_active:
             raise UnauthorizedError("User account is inactive.")
 
-        token = create_access_token(user_id=user.id, role=user.role)
+        token = create_access_token(
+            user_id=user.id,
+            role=user.role,
+            name=user.name,
+            email=user.email,
+        )
 
         self.audit_service.log_event(
             event_type=AuditEventType.USER_LOGGED_IN.value,

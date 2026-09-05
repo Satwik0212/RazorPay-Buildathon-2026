@@ -111,6 +111,12 @@ class SimulationResultItem(BaseModel):
     total_products_evaluated: Optional[int] = None
     total_eligible: Optional[int] = None
     total_disqualified: Optional[int] = None
+    # Component score breakdown (unrounded [0.0, 1.0] per feature dimension)
+    score_breakdown: Optional[Dict[str, float]] = None
+    # Grounded selected product commerce attributes (avoids missing details if outside client cache)
+    selected_product_name: Optional[str] = None
+    selected_product_price: Optional[int] = None
+    selected_product_category: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

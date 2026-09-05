@@ -7,35 +7,36 @@ import { productsApi } from '../../api/products';
 import { upsellApi } from '../../api/upsell';
 import { analyticsApi } from '../../api/analytics';
 import type { Product, UpsellResponse } from '../../types';
+import { ImportCatalogueModal } from '../../components/features/catalogue/ImportCatalogueModal';
 
 function getCompleteness(product: Product) {
   let score = 0;
   const issues: string[] = [];
   const metadata = product.metadata || {};
-  
+
   if (product.description && product.description.length > 50) score += 20;
   else issues.push('Short or missing description');
-  
+
   if (product.description && product.description.length > 200) score += 10;
-  
+
   const specs = metadata.specifications || {};
   const specCount = Object.keys(specs).length;
   if (specCount > 0) score += 20;
   else issues.push('Missing structured specifications');
-  
+
   if (specCount > 5) score += 10;
-  
+
   const images = metadata.image_urls || [];
   if (images.length > 0) score += 20;
   else issues.push('Missing images');
-  
+
   if (metadata.brand) score += 10;
-  else if (specCount > 0) score += 10; 
+  else if (specCount > 0) score += 10;
   else issues.push('Missing brand');
-  
+
   if (product.category && product.category !== 'Uncategorized') score += 10;
   else issues.push('Uncategorized');
-  
+
   return {
     score: Math.min(score, 100),
     issues,
@@ -48,12 +49,12 @@ export const Catalogue = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
-  
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [categories, setCategories] = useState<string[]>([]);
-  
+
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -69,10 +70,11 @@ export const Catalogue = () => {
   const [activeTab, setActiveTab] = useState<'info' | 'ai'>('info');
   const [suggestions, setSuggestions] = useState<UpsellResponse | null>(null);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState<any>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fetchCompleteness = async () => {
     try {
@@ -128,7 +130,7 @@ export const Catalogue = () => {
     }, 500);
     return () => clearTimeout(timer);
   }, [search]);
-  
+
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setCategoryFilter(e.target.value);
     setPage(1); // Reset page on filter
@@ -140,11 +142,11 @@ export const Catalogue = () => {
     setError('');
     setActiveTab('info');
     setSuggestions(null);
-    
+
     if (type === 'DETAIL' && product) {
       fetchSuggestions(product.id);
     }
-    
+
     if (type === 'ADD') {
       setFormData({
         name: '', description: '', category: '', price: '', initial_quantity: 10,
@@ -220,7 +222,7 @@ export const Catalogue = () => {
       } else if (modalState.type === 'REACTIVATE' && modalState.product) {
         await productsApi.reactivateProduct(modalState.product.id);
       }
-      
+
       closeModal();
       await fetchProducts();
       await fetchCompleteness();
@@ -255,9 +257,14 @@ export const Catalogue = () => {
           <h1 className="text-2xl font-bold text-[var(--rzp-text)]">Catalogue Intelligence</h1>
           <p className="text-sm text-[var(--rzp-text-muted)] mt-1">Review the completeness and metadata readiness of your full product catalog.</p>
         </div>
-        <Button onClick={() => openModal('ADD')} className="flex-shrink-0">
-          <Plus className="h-4 w-4 mr-2" /> Add Product
-        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button variant="outline" onClick={() => setShowImportModal(true)}>
+            ✦ Import with AI
+          </Button>
+          <Button onClick={() => openModal('ADD')}>
+            <Plus className="h-4 w-4 mr-2" /> Add Product
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -300,15 +307,15 @@ export const Catalogue = () => {
           <div className="flex flex-col sm:flex-row gap-4 w-full">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--rzp-text-muted)]" />
-              <Input 
-                className="pl-9" 
-                placeholder="Search products in database..." 
+              <Input
+                className="pl-9"
+                placeholder="Search products in database..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
             <div className="flex gap-2 shrink-0 overflow-x-auto pb-1 sm:pb-0">
-              <select 
+              <select
                 className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 min-w-[150px]"
                 value={categoryFilter}
                 onChange={handleCategoryChange}
@@ -342,8 +349,18 @@ export const Catalogue = () => {
                   </tr>
                 ) : products.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-[var(--rzp-text-muted)]">
-                      No products found matching your filters.
+                    <td colSpan={5} className="px-6 py-14 text-center">
+                      <Package className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                      <p className="text-base font-semibold text-gray-500 mb-1">No products yet</p>
+                      <p className="text-sm text-gray-400 mb-5">Add products manually or import your catalogue from a CSV file.</p>
+                      <div className="flex justify-center gap-3">
+                        <Button variant="outline" onClick={() => openModal('ADD')}>
+                          <Plus className="w-4 h-4 mr-1.5" /> Add Product
+                        </Button>
+                        <Button onClick={() => setShowImportModal(true)}>
+                          ✦ Import with AI
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -414,17 +431,17 @@ export const Catalogue = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right relative" onClick={e => e.stopPropagation()}>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-8 w-8 p-0"
                           onClick={(e) => { e.stopPropagation(); setActionMenuOpenId(actionMenuOpenId === product.id ? null : product.id); }}
                         >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                         {actionMenuOpenId === product.id && (
-                          <div 
-                            ref={menuRef} 
+                          <div
+                            ref={menuRef}
                             className="absolute right-6 top-10 w-48 bg-white rounded-md shadow-lg border border-[var(--rzp-border)] z-50 text-left overflow-hidden"
                           >
                             <button onClick={() => openModal('EDIT', product)} className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 text-left">Edit Details</button>
@@ -448,24 +465,24 @@ export const Catalogue = () => {
                 <ShieldCheck className="h-4 w-4 mr-1.5 text-[var(--rzp-primary)]" />
                 Real catalogue data • {totalItems} imported products
              </div>
-             
+
              {/* Pagination Controls */}
              <div className="flex items-center gap-4">
                 <span className="text-xs text-gray-500">
                   Showing {totalItems === 0 ? 0 : (page - 1) * limit + 1}–{Math.min(page * limit, totalItems)} of {totalItems}
                 </span>
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     disabled={page === 1}
                     onClick={() => setPage(p => p - 1)}
                   >
                     Previous
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     disabled={page * limit >= totalItems || totalItems === 0}
                     onClick={() => setPage(p => p + 1)}
                   >
@@ -476,6 +493,17 @@ export const Catalogue = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Catalogue Import Modal */}
+      {showImportModal && (
+        <ImportCatalogueModal
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={() => {
+            setShowImportModal(false);
+            fetchProducts();
+          }}
+        />
+      )}
 
       {/* Basic Modals (Add, Edit, Inventory, Deactivate) */}
       {modalState.type && modalState.type !== 'DETAIL' && (
@@ -494,7 +522,7 @@ export const Catalogue = () => {
                 <X className="h-5 w-5 text-gray-500" />
               </Button>
             </div>
-            
+
             <div className="p-4 overflow-y-auto">
               {error && (
                 <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200">
@@ -510,10 +538,10 @@ export const Catalogue = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Description</label>
-                    <textarea 
+                    <textarea
                       className="w-full flex min-h-[80px] rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={formData.description || ''} 
-                      onChange={e => setFormData({...formData, description: e.target.value})} 
+                      value={formData.description || ''}
+                      onChange={e => setFormData({...formData, description: e.target.value})}
                       placeholder="Product details..."
                     />
                   </div>
@@ -587,9 +615,9 @@ export const Catalogue = () => {
               <Button type="button" variant="outline" onClick={closeModal} disabled={submitting}>Cancel</Button>
               <Button type="submit" form="product-form" disabled={submitting} className={modalState.type === 'DEACTIVATE' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {modalState.type === 'DEACTIVATE' ? 'Deactivate' : 
-                 modalState.type === 'REACTIVATE' ? 'Reactivate' : 
-                 modalState.type === 'INVENTORY' ? 'Update Inventory' : 
+                {modalState.type === 'DEACTIVATE' ? 'Deactivate' :
+                 modalState.type === 'REACTIVATE' ? 'Reactivate' :
+                 modalState.type === 'INVENTORY' ? 'Update Inventory' :
                  modalState.type === 'SET_DELIVERY' ? 'Save Delivery' : 'Save Details'}
               </Button>
             </div>
@@ -610,22 +638,22 @@ export const Catalogue = () => {
                 <X className="h-5 w-5 text-gray-500" />
               </Button>
             </div>
-            
+
             <div className="flex border-b border-[var(--rzp-border)] shrink-0 px-4">
-              <button 
+              <button
                 className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'info' ? 'border-[var(--rzp-primary)] text-[var(--rzp-primary)]' : 'border-transparent text-[var(--rzp-text-muted)] hover:text-[var(--rzp-text)]'}`}
                 onClick={() => setActiveTab('info')}
               >
                 Product Details
               </button>
-              <button 
+              <button
                 className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'ai' ? 'border-[var(--rzp-primary)] text-[var(--rzp-primary)]' : 'border-transparent text-[var(--rzp-text-muted)] hover:text-[var(--rzp-text)]'}`}
                 onClick={() => setActiveTab('ai')}
               >
                 <ListChecks className="w-3.5 h-3.5 mr-1.5" /> Completeness & Metadata
               </button>
             </div>
-            
+
             <div className="overflow-y-auto flex-1 p-0">
               {activeTab === 'info' ? (
                 <div className="p-4 space-y-6">
@@ -635,7 +663,7 @@ export const Catalogue = () => {
                       {modalState.product.description || <span className="italic text-gray-400">No description provided</span>}
                     </p>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-gray-50 rounded border border-gray-100">
                       <div className="text-xs text-gray-500 mb-1">Inventory</div>
@@ -719,16 +747,16 @@ export const Catalogue = () => {
                             <div className="flex flex-col border-b border-gray-100 pb-1">
                               <span className="text-xs text-gray-500">Delivery Days</span>
                               <span className="text-sm font-medium text-gray-900">
-                                {modalState.product.metadata?.delivery_days !== undefined 
-                                  ? `${modalState.product.metadata.delivery_days} days` 
+                                {modalState.product.metadata?.delivery_days !== undefined
+                                  ? `${modalState.product.metadata.delivery_days} days`
                                   : <span className="text-amber-600 italic">Missing</span>}
                               </span>
                             </div>
                             <div className="flex flex-col border-b border-gray-100 pb-1">
                               <span className="text-xs text-gray-500">Return Window</span>
                               <span className="text-sm font-medium text-gray-900">
-                                {modalState.product.metadata?.return_days !== undefined 
-                                  ? `${modalState.product.metadata.return_days} days` 
+                                {modalState.product.metadata?.return_days !== undefined
+                                  ? `${modalState.product.metadata.return_days} days`
                                   : <span className="text-gray-400 italic">Not specified</span>}
                               </span>
                             </div>
@@ -738,7 +766,7 @@ export const Catalogue = () => {
                         <div className="pt-4 border-t border-[var(--rzp-border)]">
                           <h4 className="text-sm font-semibold mb-3">Deterministic Recommendations</h4>
                           <p className="text-xs text-gray-500 mb-4">Upsell and cross-sell relationships algorithmically calculated based on price tiers and category boundaries across the entire {completenessData?.total_products || totalItems}-item catalogue.</p>
-                          
+
                           {suggestionsLoading ? (
                             <div className="flex items-center justify-center p-6">
                               <Loader2 className="w-6 h-6 animate-spin text-[var(--rzp-primary)]" />
